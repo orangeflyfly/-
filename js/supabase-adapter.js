@@ -63,6 +63,36 @@ function appItemPatchToDb(patch){
   if('active'in patch)data.active=patch.active!==false;
   return data;
 }
+function mapDbLogToAppLog(row){
+  const d=row.created_at?new Date(row.created_at):new Date();
+  return{
+    type:row.action_type||'調整',
+    name:'',
+    qty:toQty(row.qty),
+    note:row.reason||'',
+    time:`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`,
+    rawTime:d.toISOString(),
+    itemId:row.item_id||0,
+    price:0,
+    beforeStock:row.before_stock===null?null:toQty(row.before_stock),
+    afterStock:row.after_stock===null?null:toQty(row.after_stock),
+    refType:row.ref_type||'',
+    refId:row.ref_id||''
+  };
+}
+function mapAppLogToDbLog(log){
+  return{
+    item_id:log.itemId||null,
+    action_type:log.type||'調整',
+    qty:toQty(log.qty),
+    before_stock:log.beforeStock===null||log.beforeStock===undefined?null:toQty(log.beforeStock),
+    after_stock:log.afterStock===null||log.afterStock===undefined?null:toQty(log.afterStock),
+    reason:log.note||'',
+    ref_type:log.refType||'',
+    ref_id:log.refId||null,
+    created_at:log.rawTime||new Date().toISOString()
+  };
+}
 function localSnapshot(){
   return JSON.parse(localStorage.getItem(SK)||'{}');
 }
@@ -114,8 +144,22 @@ window.InventoryDataAdapter={
   saveItem:createItemToSupabase,
   updateItem:updateItemToSupabase,
   deleteItem:deleteItemFromSupabase,
-  async loadLogs(){return localSnapshot().logs||logs;},
-  async addInventoryLog(log){logs.push(log);localSaveSnapshot({logs});return log;},
+  async loadLogs(){
+    const db=supabaseClient();
+    if(!db)return localSnapshot().logs||logs;
+    const {data,error}=await db.from('inventory_logs').select('*').order('created_at',{ascending:false}).limit(1000);
+    if(error){console.error('Supabase load logs failed:',error);throw error;}
+    const rows=(data||[]).map(mapDbLogToAppLog);
+    rows.forEach(l=>{const item=items.find(i=>i.id===l.itemId);if(item)l.name=item.name;});
+    return rows;
+  },
+  async addInventoryLog(log){
+    const db=supabaseClient();
+    if(!db){localSaveSnapshot({logs});return log;}
+    const {error}=await db.from('inventory_logs').insert(mapAppLogToDbLog(log));
+    if(error){console.error('Supabase add log failed:',error);throw error;}
+    return log;
+  },
   async loadLocations(){return localSnapshot().locations||locations;},
   async saveLocation(location){locations.push(location);localSaveSnapshot({locations});return location;},
   async loadBomItems(){return localSnapshot().bom||bom;},

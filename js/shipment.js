@@ -6,7 +6,7 @@ function populateSO(){
   previewSO();
 }
 function previewSO(){
-  const pid=parseInt(document.getElementById('so-product').value);
+  const pid=normalizeRefId(document.getElementById('so-product').value);
   const qty=toQty(document.getElementById('so-qty').value,1);
   const related=bom.filter(b=>b.product===pid);
   if(!related.length){document.getElementById('so-preview').innerHTML='<div class="empty"><div class="empty-icon">📋</div><p>此產品尚未設定包材對照</p></div>';return;}
@@ -26,8 +26,8 @@ function previewSO(){
   });
   document.getElementById('so-preview').innerHTML=html;
 }
-function submitSO(){
-  const pid=parseInt(document.getElementById('so-product').value);
+async function submitSO(){
+  const pid=normalizeRefId(document.getElementById('so-product').value);
   const qty=toQty(document.getElementById('so-qty').value,1);
   const note=document.getElementById('so-note').value.trim();
   const dateVal=document.getElementById('so-date').value;
@@ -42,13 +42,15 @@ function submitSO(){
   }
   const productBefore=product.stock;
   product.stock=toQty((product.stock-qty).toFixed(2));
+  await InventoryDataAdapter?.updateItem?.(product.id,{stock:product.stock});
   const alerts=[];
-  check.consumptions.forEach(({item:mat,qty:consume})=>{
+  for(const {item:mat,qty:consume} of check.consumptions){
     const before=mat.stock;
     mat.stock=toQty((mat.stock-consume).toFixed(2));
+    await InventoryDataAdapter?.updateItem?.(mat.id,{stock:mat.stock});
     addLog('出',mat.name,consume,`出貨:${product.name}`,dateVal,mat.id,0,{beforeStock:before,afterStock:mat.stock,refType:'shipout'});
     if(getStatus(mat)==='buy')alerts.push(mat);
-  });
+  }
   addLog('出',product.name,qty,note||'出貨',dateVal,product.id,0,{beforeStock:productBefore,afterStock:product.stock,refType:'shipout'});
   if(alerts.length){
     document.getElementById('so-alert-card').style.display='';
@@ -63,8 +65,8 @@ function populateSI(){
   document.getElementById('si-item').innerHTML=items.filter(i=>i.active!==false).map(i=>`<option value="${i.id}">[${i.type==='product'?'產品':i.type==='consumable'?'耗材':'包材'}] ${esc(i.name)}</option>`).join('');
   document.getElementById('si-date').value=localTodayString();
 }
-function submitSI(){
-  const iid=parseInt(document.getElementById('si-item').value);
+async function submitSI(){
+  const iid=normalizeRefId(document.getElementById('si-item').value);
   const qty=toQty(document.getElementById('si-qty').value,1);
   const supplier=document.getElementById('si-supplier').value.trim();
   const price=toQty(document.getElementById('si-price').value);
@@ -73,6 +75,7 @@ function submitSI(){
   if(!item){toast('請選擇品項','error');return;}
   const before=item.stock;
   item.stock=toQty((item.stock+qty).toFixed(2));
+  await InventoryDataAdapter?.updateItem?.(item.id,{stock:item.stock});
   addLog('進',item.name,qty,supplier||'進貨',dateVal,item.id,price,{beforeStock:before,afterStock:item.stock,refType:'shipin'});
   document.getElementById('si-qty').value=1;document.getElementById('si-supplier').value='';document.getElementById('si-price').value='';
   toast(`入庫成功：${item.name} +${formatQty(qty)}${item.unit}`,'success');refresh();populateSI();
@@ -84,7 +87,7 @@ function renderST(){
     <div class="st-row">
       <div style="font-size:13px;"><strong style="font-weight:500;">${esc(i.name)}</strong> <span style="font-size:11px;color:var(--text3);">${esc(i.spec)}</span></div>
       <div class="num">${formatQty(i.stock)} ${esc(i.unit)}</div>
-      <div><input type="number" id="st-${i.id}" placeholder="${formatQty(i.stock)}" min="0" step="0.01" style="height:32px;text-align:right;" oninput="calcDiff(${i.id})"></div>
+      <div><input type="number" id="st-${i.id}" placeholder="${formatQty(i.stock)}" min="0" step="0.01" style="height:32px;text-align:right;" oninput='calcDiff(${JSON.stringify(i.id)})'></div>
       <div class="num" id="diff-${i.id}" style="font-family:var(--mono);font-size:13px;color:var(--text3);">—</div>
     </div>`).join('');
 }
@@ -98,13 +101,13 @@ function calcDiff(id){
   el.style.color=diff>0?'var(--green)':diff<0?'var(--red)':'var(--text3)';
 }
 function resetST(){document.querySelectorAll('[id^="st-"]').forEach(e=>e.value='');document.querySelectorAll('[id^="diff-"]').forEach(e=>{e.textContent='—';e.style.color='var(--text3)';});}
-function confirmST(){
+async function confirmST(){
   let changed=0;
-  items.forEach(i=>{
-    const el=document.getElementById(`st-${i.id}`);if(!el||el.value==='')return;
+  for(const i of items){
+    const el=document.getElementById(`st-${i.id}`);if(!el||el.value==='')continue;
     const actual=toQty(el.value);const diff=toQty((actual-i.stock).toFixed(2));
-    if(diff!==0){const before=i.stock;i.stock=actual;addLog('盤點',i.name,Math.abs(diff),`盤點調整 ${diff>0?'+':''}${formatQty(diff)}`,localTodayString(),i.id,0,{beforeStock:before,afterStock:i.stock,refType:'stocktake'});changed++;}
-  });
+    if(diff!==0){const before=i.stock;i.stock=actual;await InventoryDataAdapter?.updateItem?.(i.id,{stock:i.stock});addLog('盤點',i.name,Math.abs(diff),`盤點調整 ${diff>0?'+':''}${formatQty(diff)}`,localTodayString(),i.id,0,{beforeStock:before,afterStock:i.stock,refType:'stocktake'});changed++;}
+  }
   if(!changed){toast('沒有差異需要調整');return;}
   toast(`盤點完成，調整了 ${changed} 個品項`,'success');
   resetST();renderST();refresh();

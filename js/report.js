@@ -65,13 +65,16 @@ function addLog(type,name,qty,note,dateStr,itemId,price=0,meta={}){
   const d=dateStr?localDateOnly(dateStr):now;
   const rawTime=dateStr?new Date(`${dateStr}T12:00:00`).toISOString():now.toISOString();
   const time=`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
-  logs.unshift({
+  const log={
     type,name,qty:toQty(qty),note,time,rawTime,itemId,price:toQty(price),
     beforeStock:meta.beforeStock===undefined?null:toQty(meta.beforeStock),
     afterStock:meta.afterStock===undefined?null:toQty(meta.afterStock),
     refType:meta.refType||'',refId:meta.refId===undefined||meta.refId===null?'':String(meta.refId)
-  });
+  };
+  logs.unshift(log);
+  InventoryDataAdapter?.addInventoryLog?.(log).catch(err=>{console.error('操作紀錄寫入 Supabase 失敗：',err);toast('操作紀錄雲端寫入失敗','error');});
   if(logs.length>1000)logs=logs.slice(0,1000);
+  return log;
 }
 function renderLog(){
   const q=(document.getElementById('log-search')?.value||'').toLowerCase();
@@ -98,17 +101,17 @@ function renderPurchase(){
   document.getElementById('pur-body').innerHTML=needBuy.length?needBuy.map(i=>{
     const c=getPurchaseCycle(i.id),sq=getSmartSuggestedQty(i),available=getAvailableStock(i),reserved=getReservedQty(i.id);
     return`<tr>
-      <td><strong style="font-weight:500;">${esc(i.name)}</strong></td>
-      <td style="color:var(--text2);">${esc(i.spec)}</td>
-      <td><span class="tag">${esc(i.unit)}</span></td>
-      <td class="num" style="color:var(--text2);">${formatQty(i.stock)}</td>
-      <td class="num" style="color:var(--amber);">${formatQty(reserved)}</td>
-      <td class="num" style="color:var(--red);font-weight:700;">${formatQty(available)}</td>
-      <td class="num" style="color:var(--text3);">${formatQty(i.minStock)}</td>
-      <td class="num" style="color:var(--green);font-weight:700;">${formatQty(sq)}</td>
-      <td>${c?`<span class="cycle-info">約每 ${c} 天</span>`:'<span style="font-size:11px;color:var(--text3);">無記錄</span>'}</td>
-      <td style="font-size:12px;color:var(--text3);">${esc(i.supplier||'—')}</td>
-      <td>${statusBadge(i)}</td>
+      <td data-label="品項名稱"><strong style="font-weight:500;">${esc(i.name)}</strong></td>
+      <td data-label="規格" style="color:var(--text2);">${esc(i.spec)}</td>
+      <td data-label="單位"><span class="tag">${esc(i.unit)}</span></td>
+      <td data-label="目前庫存" class="num" style="color:var(--text2);">${formatQty(i.stock)}</td>
+      <td data-label="保留量" class="num" style="color:var(--amber);">${formatQty(reserved)}</td>
+      <td data-label="可用庫存" class="num" style="color:var(--red);font-weight:700;">${formatQty(available)}</td>
+      <td data-label="最低庫存" class="num" style="color:var(--text3);">${formatQty(i.minStock)}</td>
+      <td data-label="建議採購" class="num" style="color:var(--green);font-weight:700;">${formatQty(sq)}</td>
+      <td data-label="採購週期">${c?`<span class="cycle-info">約每 ${c} 天</span>`:'<span style="font-size:11px;color:var(--text3);">無記錄</span>'}</td>
+      <td data-label="供應商" style="font-size:12px;color:var(--text3);">${esc(i.supplier||'—')}</td>
+      <td data-label="狀態">${statusBadge(i)}</td>
     </tr>`;
   }).join(''):'<tr><td colspan="11" style="text-align:center;padding:48px;color:var(--text3);">✓ 目前無需採購品項</td></tr>';
 }

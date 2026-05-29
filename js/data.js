@@ -107,7 +107,7 @@ function buildShipmentCheck(products){
   const issues=[],consumptions=[];
   const materialNeeds={};
   products.forEach(p=>{
-    const productId=+p.productId||+p.id||0;
+    const productId=normalizeRefId(p.productId||p.id);
     const qty=+p.qty||0;
     const product=items.find(i=>i.id===productId);
     if(!product){issues.push(`找不到產品：${p.name||productId}`);return;}
@@ -143,6 +143,7 @@ async function loadData(){
       const cloudItems=await loadItemsFromSupabase();
       loadLocalStorageData();
       items=cloudItems;
+      try{logs=await InventoryDataAdapter.loadLogs();}catch(logErr){console.error('Supabase logs 讀取失敗：',logErr);}
       normalizeData();return;
     }catch(err){
       console.error('Supabase items 讀取失敗：',err);

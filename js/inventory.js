@@ -37,18 +37,18 @@ function filterInv(){
       :`<button class="btn btn-ghost btn-sm" onclick='disableItem(${itemId})' style="color:var(--red);">停用</button>`;
     return`
     <tr style="${i.active===false?'opacity:.6;':''}">
-      <td>
+      <td data-label="品項名稱">
         <strong style="font-weight:500;">${esc(i.name)}</strong>${i.active===false?' <span class="badge badge-gray">停用</span>':''}
         ${i.partNo?`<br><span style="font-size:11px;color:var(--blue);font-family:var(--mono);">${esc(i.partNo)}</span>`:''}
         ${i.supplier?`<br><span style="font-size:11px;color:var(--text3);">${esc(i.supplier)}</span>`:''}
       </td>
-      <td style="color:var(--text2);">${esc(i.spec)}${i.color?`<br><span style="font-size:11px;color:var(--text3);">${esc(i.color)}</span>`:''}${i.pattern?`<span style="font-size:11px;color:var(--text3);margin-left:4px;">${esc(i.pattern)}</span>`:''}</td>
-      <td class="num" style="${stockStyle}">${formatQty(i.stock)}</td>
-      <td><span class="tag">${esc(i.unit)}</span></td>
-      <td class="num"><div class="qty-ctrl"><button class="qty-btn" onclick='quickAdj(${itemId},-1)'>−</button><span class="qty-num">${formatQty(i.stock)}</span><button class="qty-btn" onclick='quickAdj(${itemId},1)'>+</button></div></td>
-      <td>${locChips(i.id)}</td>
-      ${showType?`<td><span class="badge ${typeClass}">${typeLabel}</span></td>`:''}
-      <td><div style="display:flex;gap:5px;flex-wrap:wrap;">
+      <td data-label="規格" style="color:var(--text2);">${esc(i.spec)}${i.color?`<br><span style="font-size:11px;color:var(--text3);">${esc(i.color)}</span>`:''}${i.pattern?`<span style="font-size:11px;color:var(--text3);margin-left:4px;">${esc(i.pattern)}</span>`:''}</td>
+      <td data-label="庫存數" class="num" style="${stockStyle}">${formatQty(i.stock)}</td>
+      <td data-label="單位"><span class="tag">${esc(i.unit)}</span></td>
+      <td data-label="快速調整" class="num"><div class="qty-ctrl"><button class="qty-btn" onclick='quickAdj(${itemId},-1)'>−</button><span class="qty-num">${formatQty(i.stock)}</span><button class="qty-btn" onclick='quickAdj(${itemId},1)'>+</button></div></td>
+      <td data-label="庫位">${locChips(i.id)}</td>
+      ${showType?`<td data-label="類型"><span class="badge ${typeClass}">${typeLabel}</span></td>`:''}
+      <td data-label="操作"><div style="display:flex;gap:5px;flex-wrap:wrap;">
         <button class="btn btn-default btn-sm" onclick='openEditModal(${itemId})'>編輯</button>
         <button class="btn btn-warn btn-sm" onclick='adjustStock(${itemId})'>調整</button>
         ${actionBtn}

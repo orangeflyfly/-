@@ -36,8 +36,11 @@ function go(name,el){
   else if(name==='trend'){populateTrend();renderTrend();}
   else if(name==='report'){initRpt();renderReport();}
   else if(name==='schedule')renderSchedule();
+  closeMobileMenu();
 }
 function toggleInvMenu(){document.getElementById('inv-submenu').classList.toggle('collapsed');}
+function toggleMobileMenu(){document.body.classList.toggle('mobile-nav-open');}
+function closeMobileMenu(){document.body.classList.remove('mobile-nav-open');}
 function setInvType(type,el){
   sfilt=type;
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
@@ -51,6 +54,7 @@ function setInvType(type,el){
   document.getElementById('tb-title').textContent=t;
   document.getElementById('tb-sub').textContent=s;
   filterInv();
+  closeMobileMenu();
 }
 function goItemManage(el){
   sfilt='manage';
@@ -62,6 +66,7 @@ function goItemManage(el){
   document.getElementById('tb-title').textContent='品項管理';
   document.getElementById('tb-sub').textContent='新增、編輯與停用品項';
   filterInv();
+  closeMobileMenu();
 }
 function goInactiveItems(el){
   sfilt='inactive';
@@ -73,6 +78,7 @@ function goInactiveItems(el){
   document.getElementById('tb-title').textContent='停用品項';
   document.getElementById('tb-sub').textContent='重新啟用或清理測試品項';
   filterInv();
+  closeMobileMenu();
 }
 
 // ── MODAL ─────────────────────────────────────────────────────────────────
