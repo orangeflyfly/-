@@ -50,6 +50,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .tb-title{font-size:15px;font-weight:500;}
 .tb-sub{font-size:11px;color:var(--text3);}
 .content{padding:20px 24px;}
+.mobile-menu-btn{display:none;}
+.mobile-nav-backdrop{display:none;}
 
 /* BUTTONS */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 15px;height:36px;border-radius:var(--r-sm);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;transition:var(--tr);border:1.5px solid transparent;white-space:nowrap;user-select:none;}
@@ -258,3 +260,69 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .loc-slot{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
 .loc-slot:last-child{border-bottom:none;}
 .loc-id-badge{display:inline-block;padding:2px 10px;background:var(--purple-bg);border:1px solid var(--purple-bd);color:var(--purple);border-radius:var(--r-sm);font-family:var(--mono);font-size:12px;font-weight:500;min-width:44px;text-align:center;}
+
+@media (max-width:768px){
+  body{font-size:14px;overflow-x:hidden;}
+  .sidebar{width:min(86vw,320px);transform:translateX(-105%);transition:transform .2s ease;z-index:220;box-shadow:var(--sh-lg);}
+  body.mobile-nav-open .sidebar{transform:translateX(0);}
+  .mobile-nav-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:180;}
+  body.mobile-nav-open .mobile-nav-backdrop{display:block;}
+  .main{margin-left:0;min-width:0;}
+  .topbar{height:auto;min-height:56px;padding:10px 12px;gap:8px;align-items:flex-start;}
+  .topbar>div:last-child{flex-wrap:wrap;justify-content:flex-end;}
+  .mobile-menu-btn{display:inline-flex;height:36px;padding:0 10px;}
+  .content{padding:12px;}
+  .metric-grid,.rpt-grid{grid-template-columns:1fr;gap:10px;}
+  .search-wrap{align-items:stretch;}
+  .search-box{min-width:100%;flex-basis:100%;}
+  .search-wrap>.btn{width:100%;}
+  .table-wrap{border:none;box-shadow:none;overflow-x:auto;border-radius:0;}
+  table{min-width:680px;}
+  .btn-sm{height:36px;padding:0 12px;font-size:13px;}
+  .qty-btn{width:36px;height:36px;font-size:16px;}
+  .qty-num{min-width:54px;line-height:36px;font-size:14px;}
+
+  #panel-inventory .table-wrap,
+  #panel-purchase .table-wrap{overflow:visible;}
+  #panel-inventory table,
+  #panel-purchase table{min-width:0;background:transparent;}
+  #panel-inventory thead,
+  #panel-purchase thead{display:none;}
+  #panel-inventory tbody,
+  #panel-purchase tbody,
+  #panel-inventory tr,
+  #panel-purchase tr{display:block;}
+  #panel-inventory tr,
+  #panel-purchase tr{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh-sm);padding:12px;margin-bottom:12px;}
+  #panel-inventory tbody tr:hover,
+  #panel-purchase tbody tr:hover{background:var(--surface);}
+  #panel-inventory td,
+  #panel-purchase td{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;border-bottom:1px solid var(--border);padding:9px 0;font-size:14px;text-align:right;}
+  #panel-inventory td:last-child,
+  #panel-purchase td:last-child{border-bottom:none;padding-bottom:0;}
+  #panel-inventory td::before,
+  #panel-purchase td::before{content:attr(data-label);font-size:12px;font-weight:600;color:var(--text3);text-align:left;white-space:nowrap;}
+  #panel-inventory td[data-label="品項名稱"],
+  #panel-purchase td[data-label="品項名稱"]{display:block;text-align:left;padding-top:0;}
+  #panel-inventory td[data-label="品項名稱"]::before,
+  #panel-purchase td[data-label="品項名稱"]::before{display:none;}
+  #panel-inventory td[data-label="操作"]{display:block;text-align:left;}
+  #panel-inventory td[data-label="操作"]::before{display:block;margin-bottom:8px;}
+  #panel-inventory td[data-label="操作"]>div{gap:8px!important;}
+  #panel-inventory td[data-label="操作"] .btn{min-width:74px;}
+  #panel-inventory .num,
+  #panel-purchase .num{text-align:right;font-size:14px;}
+  #panel-purchase td[data-label="目前庫存"],
+  #panel-purchase td[data-label="最低庫存"],
+  #panel-purchase td[data-label="建議採購"],
+  #panel-purchase td[data-label="單位"],
+  #panel-purchase td[data-label="採購週期"],
+  #panel-purchase td[data-label="供應商"]{display:flex;}
+  .loc-chip{font-size:12px;margin:2px 0 2px 4px;}
+  .modal{width:calc(100vw - 24px);max-height:92vh;}
+  .modal-body{max-height:70vh;overflow:auto;}
+  .st-row{grid-template-columns:1fr;gap:6px;padding:12px 0;}
+  .sch-item{flex-direction:column;gap:8px;}
+  .sch-actions{width:100%;flex-wrap:wrap;}
+  .sch-actions .btn{flex:1;min-width:120px;}
+}
