@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>庫存管理系統 v5</title>
+<title>庫存管理系統 V0.9 雲端試用版</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -17,7 +17,7 @@
   <div class="sb-logo">
     <div class="icon">📦</div>
     <h1>庫存管理系統</h1>
-    <p>v5.0 含出貨排程</p>
+    <p>V0.9 雲端試用版</p>
   </div>
   <nav class="sb-nav">
     <div class="nav-item active" onclick="go('overview',this)">
@@ -95,6 +95,14 @@
       <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
       操作紀錄
     </div>
+    <div class="nav-item" onclick="go('datacheck',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.72-1.36 3.486 0l6.516 11.585c.75 1.334-.213 2.984-1.742 2.984H3.483c-1.53 0-2.492-1.65-1.742-2.984L8.257 3.1zM11 14a1 1 0 10-2 0 1 1 0 002 0zm-1-2a1 1 0 01-1-1V7a1 1 0 112 0v4a1 1 0 01-1 1z"/></svg>
+      資料檢查
+    </div>
+    <div class="nav-item" onclick="go('help',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10A8 8 0 112 10a8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.732-1A3 3 0 1111 10.83V11a1 1 0 11-2 0v-.5a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z"/></svg>
+      使用說明
+    </div>
   </nav>
   <div class="sb-footer">
     <div class="si" id="save-status">● 資料已儲存</div>
@@ -113,6 +121,11 @@
     <div style="display:flex;align-items:center;gap:10px;">
       <button class="btn btn-default mobile-menu-btn" onclick="toggleMobileMenu()">☰ 選單</button>
       <div><div class="tb-title" id="tb-title">總覽儀表板</div><div class="tb-sub" id="tb-sub">掌握所有庫存狀況</div></div>
+      <div class="trial-badges">
+        <span class="trial-badge version">V0.9 雲端試用版</span>
+        <span class="trial-badge" id="data-mode-badge">資料模式確認中</span>
+        <span class="trial-badge" id="cloud-status-badge">連線檢查中</span>
+      </div>
     </div>
     <div style="display:flex;gap:8px;">
       <button class="btn btn-default" onclick="document.getElementById('importFile').click()">
@@ -364,6 +377,7 @@
         <div class="filter-btns">
           <button class="fbtn active" onclick="setLF('all',this)">全部</button>
           <button class="fbtn" onclick="setLF('出',this)">出貨</button>
+          <button class="fbtn" onclick="setLF('扣包材',this)">扣包材</button>
           <button class="fbtn" onclick="setLF('進',this)">進貨</button>
           <button class="fbtn" onclick="setLF('調整',this)">手動調整</button>
           <button class="fbtn" onclick="setLF('盤點',this)">盤點</button>
@@ -385,6 +399,50 @@
         <table><thead><tr><th>品項名稱</th><th>規格</th><th>單位</th><th class="num">帳面庫存</th><th class="num">保留量</th><th class="num">可用庫存</th><th class="num">最低庫存</th><th class="num">建議採購量</th><th>採購週期</th><th>供應商</th><th>狀態</th></tr></thead>
         <tbody id="pur-body"></tbody></table>
       </div>
+    </div>
+
+    <!-- DATA CHECK -->
+    <div id="panel-datacheck" class="panel">
+      <div class="card" style="margin-bottom:14px;"><div class="card-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div class="sec-title" style="margin-bottom:4px;">資料檢查</div>
+            <p style="font-size:13px;color:var(--text3);">只顯示警告，不會自動修正資料。</p>
+          </div>
+          <button class="btn btn-primary" onclick="renderDataCheck()">重新檢查</button>
+        </div>
+      </div></div>
+      <div class="rpt-grid" id="dc-summary"></div>
+      <div class="card"><div class="card-body" id="dc-body"></div></div>
+    </div>
+
+    <!-- HELP -->
+    <div id="panel-help" class="panel">
+      <div class="card" style="margin-bottom:14px;"><div class="card-body">
+        <div class="sec-title" style="margin-bottom:8px;">內部試用版說明</div>
+        <div class="help-status">
+          <span class="trial-badge version">V0.9 雲端試用版</span>
+          <span class="trial-badge" id="help-data-mode">資料模式確認中</span>
+          <span class="trial-badge" id="help-cloud-status">連線檢查中</span>
+        </div>
+      </div></div>
+      <div class="help-grid">
+        <div class="help-card"><strong>庫存總覽</strong><span>查看產品、包材、耗材庫存。</span></div>
+        <div class="help-card"><strong>進貨登記</strong><span>補貨入庫時使用，會更新庫存並留下操作紀錄。</span></div>
+        <div class="help-card"><strong>出貨登記</strong><span>產品出貨時使用，會依 BOM 自動扣包材。</span></div>
+        <div class="help-card"><strong>出貨排程</strong><span>建立未來出貨安排，確認出貨後才扣庫。</span></div>
+        <div class="help-card"><strong>BOM 包材對照</strong><span>設定產品出貨會消耗哪些包材。</span></div>
+        <div class="help-card"><strong>備份 / 還原</strong><span>大量修改前建議先備份，避免測試資料難以回復。</span></div>
+        <div class="help-card"><strong>資料檢查</strong><span>定期檢查重複品項、異常庫位、BOM 錯誤。</span></div>
+      </div>
+      <div class="card" style="margin-top:14px;"><div class="card-body">
+        <div class="sec-title" style="margin-bottom:8px;">注意事項</div>
+        <div class="help-notes">
+          <div>測試階段暫時沒有登入權限，請勿分享網址給不相關人員。</div>
+          <div>強制刪除只用於測試資料，正式資料請以停用為主。</div>
+          <div>正式使用前會再加入帳號權限。</div>
+        </div>
+      </div></div>
     </div>
 
   </div>
