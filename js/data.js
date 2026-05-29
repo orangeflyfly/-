@@ -6,6 +6,13 @@ let trendChart=null;
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 let schView='cal',schFilter='all';
 let cloudConnectionOk=false;
+let cloudConnectionError='';
+
+function setCloudConnectionStatus(ok,error=''){
+  cloudConnectionOk=!!ok;
+  cloudConnectionError=error?String(error):'';
+  if(typeof updateTrialStatus==='function')updateTrialStatus();
+}
 
 function esc(value){
   return String(value??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -154,16 +161,19 @@ async function loadData(){
       try{locations=await InventoryDataAdapter.loadLocations();}catch(locErr){console.error('Supabase locations 讀取失敗：',locErr);alert(locErr?.message||'Supabase locations 讀取失敗');}
       try{bom=await InventoryDataAdapter.loadBomItems();}catch(bomErr){console.error('Supabase bom_items 讀取失敗：',bomErr);alert(bomErr?.message||'Supabase bom_items 讀取失敗');}
       try{schedules=await InventoryDataAdapter.loadSchedules();}catch(schErr){console.error('Supabase schedules 讀取失敗：',schErr);alert(schErr?.message||'Supabase schedules 讀取失敗');}
-      cloudConnectionOk=true;
+      setCloudConnectionStatus(true);
       normalizeData();return;
     }catch(err){
-      cloudConnectionOk=false;
       console.error('Supabase items 讀取失敗：',err);
+      setCloudConnectionStatus(false,err?.message||err);
       alert('Supabase items 讀取失敗，系統暫時載入 localStorage 資料，請檢查網址、anon key、RLS 或網路狀態。');
       if(loadLocalStorageData())return;
     }
-  }else if(loadLocalStorageData())return;
-  cloudConnectionOk=!window.InventoryDataAdapter?.isSupabaseEnabled?.();
+  }else{
+    setCloudConnectionStatus(false);
+    if(loadLocalStorageData())return;
+  }
+  if(!window.InventoryDataAdapter?.isSupabaseEnabled?.())setCloudConnectionStatus(false);
   // defaults
   items=[
     {id:1,name:'瓦楞紙箱 A',spec:'30x20x15cm',unit:'個',stock:48,minStock:20,type:'package',waste:2,supplier:''},

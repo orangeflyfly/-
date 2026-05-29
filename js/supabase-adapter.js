@@ -15,6 +15,12 @@ function supabaseClient(){
   }
   return window._imsSupabaseClient;
 }
+function markSupabaseSuccess(){
+  if(typeof setCloudConnectionStatus==='function')setCloudConnectionStatus(true);
+}
+function markSupabaseFailure(error){
+  if(typeof setCloudConnectionStatus==='function')setCloudConnectionStatus(false,error?.message||error);
+}
 function mapDbItemToAppItem(row){
   return{
     id:row.id,
@@ -248,21 +254,24 @@ async function loadItemsFromSupabase(){
   const db=supabaseClient();
   if(!db)return items;
   const {data,error}=await db.from('items').select('*').order('name',{ascending:true});
-  if(error){console.error('Supabase load items failed:',error);throw error;}
+  if(error){console.error('Supabase load items failed:',error);markSupabaseFailure(error);throw error;}
+  markSupabaseSuccess();
   return (data||[]).map(mapDbItemToAppItem);
 }
 async function createItemToSupabase(item){
   const db=supabaseClient();
   if(!db)return item;
   const {data,error}=await db.from('items').insert(mapAppItemToDbItem(item)).select('*').single();
-  if(error){console.error('Supabase create item failed:',error);throw error;}
+  if(error){console.error('Supabase create item failed:',error);markSupabaseFailure(error);throw error;}
+  markSupabaseSuccess();
   return mapDbItemToAppItem(data);
 }
 async function updateItemToSupabase(itemId,patch){
   const db=supabaseClient();
   if(!db)return items.find(i=>i.id===itemId);
   const {data,error}=await db.from('items').update(appItemPatchToDb(patch)).eq('id',itemId).select('*').single();
-  if(error){console.error('Supabase update item failed:',error);throw error;}
+  if(error){console.error('Supabase update item failed:',error);markSupabaseFailure(error);throw error;}
+  markSupabaseSuccess();
   return mapDbItemToAppItem(data);
 }
 async function deleteItemFromSupabase(itemId){
@@ -271,6 +280,36 @@ async function deleteItemFromSupabase(itemId){
   const {error}=await db.from('items').delete().eq('id',itemId);
   if(error){console.error('Supabase delete item failed:',error);throw error;}
 }
+async function importUpsertItemToSupabase(item,options={}){
+  const db=supabaseClient();
+  if(!db)return{status:'local',item};
+  const dbItem={...mapAppItemToDbItem(item),active:item.active!==false};
+  let found=null;
+  if(dbItem.part_no){
+    const {data,error}=await db.from('items').select('*').ilike('part_no',dbItem.part_no).limit(1);
+    if(error){console.error('Supabase import find by part_no failed:',error);markSupabaseFailure(error);throw error;}
+    found=data?.[0]||null;
+    if(!found&&options.fallbackName){
+      const {data:nameData,error:nameError}=await db.from('items').select('*').eq('name',dbItem.name).limit(1);
+      if(nameError){console.error('Supabase import find by name failed:',nameError);markSupabaseFailure(nameError);throw nameError;}
+      found=nameData?.[0]||null;
+    }
+  }else{
+    const {data,error}=await db.from('items').select('*').eq('name',dbItem.name).eq('type',dbItem.type);
+    if(error){console.error('Supabase import find by name/spec/type failed:',error);markSupabaseFailure(error);throw error;}
+    found=(data||[]).find(row=>String(row.spec||'').trim()===String(dbItem.spec||'').trim())||null;
+  }
+  if(found){
+    const {data,error}=await db.from('items').update(dbItem).eq('id',found.id).select('*').single();
+    if(error){console.error('Supabase import update item failed:',error);markSupabaseFailure(error);throw error;}
+    markSupabaseSuccess();
+    return{status:'updated',item:mapDbItemToAppItem(data)};
+  }
+  const {data,error}=await db.from('items').insert(dbItem).select('*').single();
+  if(error){console.error('Supabase import insert item failed:',error);markSupabaseFailure(error);throw error;}
+  markSupabaseSuccess();
+  return{status:'added',item:mapDbItemToAppItem(data)};
+}
 
 window.mapDbItemToAppItem=mapDbItemToAppItem;
 window.mapAppItemToDbItem=mapAppItemToDbItem;
@@ -278,6 +317,7 @@ window.loadItemsFromSupabase=loadItemsFromSupabase;
 window.createItemToSupabase=createItemToSupabase;
 window.updateItemToSupabase=updateItemToSupabase;
 window.deleteItemFromSupabase=deleteItemFromSupabase;
+window.importUpsertItemToSupabase=importUpsertItemToSupabase;
 
 console.log(useSupabase()?'Supabase mode enabled':'localStorage mode enabled');
 
@@ -287,6 +327,7 @@ window.InventoryDataAdapter={
   saveItem:createItemToSupabase,
   updateItem:updateItemToSupabase,
   deleteItem:deleteItemFromSupabase,
+  importUpsertItem:importUpsertItemToSupabase,
   async loadLogs(){
     const db=supabaseClient();
     if(!db)return localSnapshot().logs||logs;

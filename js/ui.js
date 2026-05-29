@@ -19,7 +19,7 @@ const panelMeta={
 function updateTrialStatus(){
   const cloudMode=!!window.InventoryDataAdapter?.isSupabaseEnabled?.();
   const modeText=cloudMode?'Supabase 雲端模式':'localStorage 本機模式';
-  const statusText=cloudMode?(cloudConnectionOk?'雲端連線正常':'雲端連線失敗'):'本機資料模式';
+  const statusText=cloudMode?(cloudConnectionOk?'雲端連線正常':`雲端連線失敗${cloudConnectionError?`：${cloudConnectionError}`:''}`):'未啟用雲端';
   const modeEls=[document.getElementById('data-mode-badge'),document.getElementById('help-data-mode')].filter(Boolean);
   const statusEls=[document.getElementById('cloud-status-badge'),document.getElementById('help-cloud-status')].filter(Boolean);
   modeEls.forEach(el=>{el.textContent=modeText;el.className=`trial-badge ${cloudMode?'cloud':'local'}`;});
@@ -125,8 +125,9 @@ function refresh(){updateMetrics();filterInv();renderOverview();updateSchBadge()
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 (async function initApp(){
+  updateTrialStatus();
   try{await loadData();}
-  catch(err){console.error(err);toast('雲端資料載入失敗，請檢查 Supabase 設定','error');}
+  catch(err){console.error(err);setCloudConnectionStatus(false,err?.message||err);toast('雲端資料載入失敗，請檢查 Supabase 設定','error');}
   initRpt();updateTrialStatus();refresh();
 })();
 

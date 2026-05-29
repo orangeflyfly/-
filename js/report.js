@@ -293,18 +293,14 @@ function findImportItemMatch(data,options={}){
   return items.find(i=>normalizeImportText(i.name)===name&&normalizeImportText(i.spec)===spec&&(i.type==='material'?'package':i.type)===type);
 }
 async function upsertImportedItem(data,options={}){
-  const ex=findImportItemMatch(data,options);
   if(window.InventoryDataAdapter?.isSupabaseEnabled?.()){
-    if(ex){
-      const saved=await InventoryDataAdapter.updateItem(ex.id,data);
-      Object.assign(ex,saved||data);
-      return'updated';
-    }
-    const localItem={id:nextId++,...data};
-    const saved=await InventoryDataAdapter.saveItem(localItem);
-    items.push(saved||localItem);
-    return'added';
+    const result=await InventoryDataAdapter.importUpsertItem(data,options);
+    const saved=result.item;
+    const idx=items.findIndex(i=>i.id===saved.id);
+    if(idx>=0)items[idx]=saved;else items.push(saved);
+    return result.status;
   }
+  const ex=findImportItemMatch(data,options);
   if(ex){Object.assign(ex,data);return'updated';}
   items.push({id:nextId++,...data});return'added';
 }
@@ -396,7 +392,7 @@ function handleErpImport(ev){
         }
 
         normalizeData();
-        if(window.InventoryDataAdapter?.isSupabaseEnabled?.()){await reloadCloudReportData();}
+        if(window.InventoryDataAdapter?.isSupabaseEnabled?.()){items=await loadItemsFromSupabase();await reloadCloudReportData();}
         toast(`ERP 匯入完成：新增 ${added}，更新 ${updated} 筆，庫位更新 ${locUpdated} 筆`,'success');
 
       }else{
@@ -458,7 +454,7 @@ function handleErpImport(ev){
           }
         }
         normalizeData();
-        if(window.InventoryDataAdapter?.isSupabaseEnabled?.()){await reloadCloudReportData();}
+        if(window.InventoryDataAdapter?.isSupabaseEnabled?.()){items=await loadItemsFromSupabase();await reloadCloudReportData();}
         const msg=`標準匯入完成：新增 ${added} 筆，更新 ${updated} 筆，跳過 ${skipped} 筆，警告 ${warnings.length} 筆`;
         toast(msg,warnings.length?'warn':'success');
         if(warnings.length)alert(`${msg}\n\n${warnings.slice(0,12).join('\n')}${warnings.length>12?`\n...另有 ${warnings.length-12} 筆警告`:''}`);
