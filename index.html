@@ -1,0 +1,489 @@
+﻿<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>庫存管理系統 v5</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sb-logo">
+    <div class="icon">📦</div>
+    <h1>庫存管理系統</h1>
+    <p>v5.0 含出貨排程</p>
+  </div>
+  <nav class="sb-nav">
+    <div class="nav-item active" onclick="go('overview',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2H3V4zM3 10a1 1 0 011-1h6v8H4a1 1 0 01-1-1v-6zM14 9h2a1 1 0 011 1v6a1 1 0 01-1 1h-2V9z"/></svg>
+      總覽儀表板
+    </div>
+    <div class="nav-sec">庫存總覽</div>
+    <div class="nav-item nav-parent" onclick="toggleInvMenu()">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3z"/></svg>
+      庫存總覽
+      <span class="nb" id="badge-buy" style="display:none">0</span>
+    </div>
+    <div class="nav-sub" id="inv-submenu">
+      <div class="nav-sub-item" onclick="setInvType('all',this)">全部庫存</div>
+      <div class="nav-sub-item" onclick="setInvType('product',this)">產品庫存</div>
+      <div class="nav-sub-item" onclick="setInvType('package',this)">包材庫存</div>
+      <div class="nav-sub-item" onclick="setInvType('consumable',this)">耗材庫存</div>
+    </div>
+    <div class="nav-sec">日常作業</div>
+    <div class="nav-item" onclick="go('shipout',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 1a1 1 0 000 2h1.22l.305 1.222 1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3z"/></svg>
+      出貨登記
+    </div>
+    <div class="nav-item" onclick="go('schedule',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"/></svg>
+      出貨排程
+      <span class="nb" id="badge-sch" style="display:none;background:var(--amber);">0</span>
+    </div>
+    <div class="nav-item" onclick="go('shipin',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"/></svg>
+      進貨登記
+    </div>
+    <div class="nav-item" onclick="go('stocktake',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg>
+      批次盤點
+    </div>
+    <div class="nav-sec">採購管理</div>
+    <div class="nav-item" onclick="go('purchase',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z"/></svg>
+      採購清單
+      <span class="nb" id="badge-pur" style="display:none">0</span>
+    </div>
+    <div class="nav-sec">基礎設定</div>
+    <div class="nav-item" onclick="goItemManage(this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a1 1 0 01.894.553l1.382 2.764 3.052.443a1 1 0 01.554 1.706l-2.21 2.154.522 3.04a1 1 0 01-1.451 1.054L10 12.27l-2.743 1.444a1 1 0 01-1.451-1.054l.522-3.04-2.21-2.154a1 1 0 01.554-1.706l3.052-.443L9.106 2.553A1 1 0 0110 2z"/></svg>
+      品項管理
+    </div>
+    <div class="nav-item" onclick="goInactiveItems(this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm2 6a1 1 0 000 2h6a1 1 0 100-2H7z"/></svg>
+      停用品項
+    </div>
+    <div class="nav-item" onclick="go('bom',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z"/></svg>
+      包材對照表
+    </div>
+    <div class="nav-item" onclick="go('location',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"/></svg>
+      庫位管理
+      <span class="nb" id="badge-loc" style="display:none;background:var(--purple);">●</span>
+    </div>
+    <div class="nav-sec">報表分析</div>
+    <div class="nav-item" onclick="go('report',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm2 10a1 1 0 10-2 0v3a1 1 0 102 0v-3zm2-3a1 1 0 011 1v5a1 1 0 11-2 0v-5a1 1 0 011-1zm4-1a1 1 0 10-2 0v6a1 1 0 102 0V8z"/></svg>
+      月報表
+    </div>
+    <div class="nav-item" onclick="go('trend',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3z"/></svg>
+      庫存趨勢圖
+    </div>
+    <div class="nav-item" onclick="go('usage',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+      包材使用率排行
+    </div>
+    <div class="nav-item" onclick="go('log',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
+      操作紀錄
+    </div>
+  </nav>
+  <div class="sb-footer">
+    <div class="si" id="save-status">● 資料已儲存</div>
+    <div class="sb-btns">
+      <button class="sb-btn" onclick="exportBackup()">📦 備份</button>
+      <button class="sb-btn" onclick="document.getElementById('restoreFile').click()">🔄 還原</button>
+      <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="importBackup(event)">
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div><div class="tb-title" id="tb-title">總覽儀表板</div><div class="tb-sub" id="tb-sub">掌握所有庫存狀況</div></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-default" onclick="document.getElementById('importFile').click()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z"/></svg>
+        匯入 ERP / Excel
+      </button>
+      <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none" onchange="handleImport(event)">
+      <button class="btn btn-primary" onclick="exportExcel()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
+        匯出 Excel
+      </button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- OVERVIEW -->
+    <div id="panel-overview" class="panel active">
+      <div class="metric-grid">
+        <div class="metric-card info"><div class="m-label">品項總數</div><div class="m-value" id="m-total">0</div><div class="m-sub">所有庫存品項</div></div>
+        <div class="metric-card danger"><div class="m-label">需立即採購</div><div class="m-value" id="m-buy">0</div><div class="m-sub">低於最低庫存</div></div>
+        <div class="metric-card warning"><div class="m-label">庫存偏低</div><div class="m-value" id="m-low">0</div><div class="m-sub">接近最低標準</div></div>
+        <div class="metric-card success"><div class="m-label">庫存正常</div><div class="m-value" id="m-ok">0</div><div class="m-sub">無需補貨</div></div>
+      </div>
+      <div id="alert-section" style="margin-bottom:16px;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div class="card"><div class="card-body">
+          <div class="sec-title" style="margin-bottom:12px;">採購週期預測</div>
+          <div id="ov-predict"></div>
+        </div></div>
+        <div class="card"><div class="card-body">
+          <div class="sec-title" style="margin-bottom:12px;">最近操作紀錄</div>
+          <div id="ov-log"></div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div id="panel-inventory" class="panel">
+      <div class="search-wrap">
+        <div class="search-box"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
+          <input type="text" id="inv-search" placeholder="搜尋品項…" oninput="filterInv()"></div>
+        <button class="btn btn-primary" onclick="openAddModal()">+ 新增品項</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead id="inv-head"></thead>
+          <tbody id="inv-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SCHEDULE -->
+    <div id="panel-schedule" class="panel">
+      <!-- today banner -->
+      <div id="sch-today-banner" style="display:none;"></div>
+      <!-- view toggle + add button -->
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+        <div style="display:flex;border:1px solid var(--border2);border-radius:var(--r-sm);overflow:hidden;">
+          <button id="sch-view-cal" onclick="setSchView('cal')" style="padding:7px 16px;border:none;background:var(--accent);color:#F7F5F0;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font);">📅 月曆</button>
+          <button id="sch-view-list" onclick="setSchView('list')" style="padding:7px 16px;border:none;background:transparent;color:var(--text2);font-size:13px;cursor:pointer;font-family:var(--font);">📋 列表</button>
+        </div>
+        <div class="filter-btns" id="sch-list-filters" style="display:none;">
+          <button class="fbtn active" onclick="setSchFilter('all',this)">全部</button>
+          <button class="fbtn" onclick="setSchFilter('pending',this)">待出貨</button>
+          <button class="fbtn" onclick="setSchFilter('warning',this)">即將到期</button>
+          <button class="fbtn" onclick="setSchFilter('overdue',this)">已逾期</button>
+          <button class="fbtn" onclick="setSchFilter('shipped',this)">已出貨</button>
+        </div>
+        <button class="btn btn-primary" style="margin-left:auto;" onclick="openSchModal()">+ 新增排程</button>
+      </div>
+      <!-- CALENDAR VIEW -->
+      <div id="sch-cal-view">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+          <button class="btn btn-default btn-sm" onclick="calPrev()">‹ 上月</button>
+          <div style="font-size:15px;font-weight:500;min-width:120px;text-align:center;" id="cal-month-label"></div>
+          <button class="btn btn-default btn-sm" onclick="calNext()">下月 ›</button>
+          <button class="btn btn-ghost btn-sm" onclick="calToday()">今天</button>
+        </div>
+        <div class="cal-header">
+          <div class="cal-dow">日</div><div class="cal-dow">一</div><div class="cal-dow">二</div>
+          <div class="cal-dow">三</div><div class="cal-dow">四</div><div class="cal-dow">五</div><div class="cal-dow">六</div>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+      <!-- LIST VIEW -->
+      <div id="sch-list-view" style="display:none;">
+        <div class="card"><div class="card-body" id="sch-list-body"></div></div>
+      </div>
+    </div>
+
+    <!-- SHIPOUT -->
+    <div id="panel-shipout" class="panel">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div class="card"><div class="card-body">
+          <div class="sec-title" style="margin-bottom:14px;">出貨資訊</div>
+          <div class="fg" style="margin-bottom:11px;"><label>選擇產品</label><select id="so-product" onchange="previewSO()"></select></div>
+          <div class="fg" style="margin-bottom:11px;"><label>出貨數量</label><input type="number" id="so-qty" value="1" min="1" oninput="previewSO()"></div>
+          <div class="fg" style="margin-bottom:11px;"><label>備註（客戶 / 訂單號）</label><input type="text" id="so-note" placeholder="選填"></div>
+          <div class="fg" style="margin-bottom:16px;"><label>出貨日期</label><input type="date" id="so-date"></div>
+          <button class="btn btn-primary btn-lg" style="width:100%;" onclick="submitSO()">✓ 確認出貨</button>
+        </div></div>
+        <div class="card"><div class="card-body">
+          <div class="sec-title" style="margin-bottom:11px;">包材消耗預覽</div>
+          <div id="so-preview"><div class="empty"><div class="empty-icon">📋</div><p>請先選擇產品</p></div></div>
+        </div></div>
+      </div>
+      <div class="card" id="so-alert-card" style="margin-top:14px;display:none;">
+        <div class="card-body"><div class="sec-title" style="margin-bottom:10px;">出貨後警示</div><div id="so-alert-body"></div></div>
+      </div>
+    </div>
+
+    <!-- SHIPIN -->
+    <div id="panel-shipin" class="panel">
+      <div class="card" style="max-width:500px;"><div class="card-body">
+        <div class="sec-title" style="margin-bottom:14px;">補充庫存</div>
+        <div class="fg" style="margin-bottom:11px;"><label>選擇品項</label><select id="si-item"></select></div>
+        <div class="fg" style="margin-bottom:11px;"><label>進貨數量</label><input type="number" id="si-qty" value="1" min="1"></div>
+        <div class="fg" style="margin-bottom:11px;"><label>供應商（選填）</label><input type="text" id="si-supplier" placeholder="供應商名稱"></div>
+        <div class="fg" style="margin-bottom:11px;"><label>單價（選填，用於月報成本）</label><input type="number" id="si-price" placeholder="0" min="0" step="0.01"></div>
+        <div class="fg" style="margin-bottom:16px;"><label>進貨日期</label><input type="date" id="si-date"></div>
+        <button class="btn btn-success btn-lg" style="width:100%;" onclick="submitSI()">+ 確認入庫</button>
+      </div></div>
+    </div>
+
+    <!-- STOCKTAKE -->
+    <div id="panel-stocktake" class="panel">
+      <div class="card"><div class="card-body">
+        <div class="sec-header">
+          <div><div class="sec-title">批次盤點</div><p style="font-size:12px;color:var(--text3);margin-top:2px;">輸入實際盤點數量，系統自動比對差異</p></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-default btn-sm" onclick="resetST()">重設</button>
+            <button class="btn btn-primary btn-sm" onclick="confirmST()">確認盤點</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 90px 70px;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;">品項名稱</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;text-align:right;">帳面</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;text-align:right;">實際</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;text-align:right;">差異</div>
+        </div>
+        <div id="st-body"></div>
+      </div></div>
+    </div>
+
+    <!-- LOCATION -->
+    <div id="panel-location" class="panel">
+      <div style="display:grid;grid-template-columns:1fr 340px;gap:16px;">
+        <div>
+          <div class="sec-header">
+            <div><div class="sec-title" style="margin-bottom:0;">庫位總覽</div><p style="font-size:12px;color:var(--text3);margin-top:3px;">每個品項放在哪個庫位、數量多少</p></div>
+            <button class="btn btn-purple" onclick="openLocModal()">+ 指定庫位</button>
+          </div>
+          <div class="search-wrap" style="margin-bottom:14px;">
+            <div class="search-box"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
+              <input type="text" id="loc-search" placeholder="搜尋品項或庫位…" oninput="renderLoc()"></div>
+          </div>
+          <div id="loc-list"></div>
+        </div>
+        <div>
+          <div class="sec-title" style="margin-bottom:12px;">依庫位查詢</div>
+          <div id="loc-by-zone"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOM -->
+    <div id="panel-bom" class="panel">
+      <div class="card" style="margin-bottom:14px;"><div class="card-body">
+        <div class="sec-title" style="margin-bottom:4px;">新增包材對照</div>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:13px;">設定每種產品出貨時自動扣除的包材與用量，支援損耗率</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="fg" style="flex:1;min-width:120px;"><label>產品</label><select id="bom-prod"></select></div>
+          <div class="fg" style="flex:1;min-width:120px;"><label>使用包材</label><select id="bom-mat"></select></div>
+          <div class="fg" style="width:80px;"><label>用量</label><input type="number" id="bom-qty" value="1" min="0.01" step="0.01"></div>
+          <div class="fg" style="width:80px;"><label>損耗率%</label><input type="number" id="bom-waste" value="0" min="0" max="100"></div>
+          <div class="fg" style="min-width:110px;"><label>包裝方式</label><input type="text" id="bom-label" placeholder="標準包裝"></div>
+          <div><button class="btn btn-primary" onclick="addBom()" style="margin-top:22px;">新增</button></div>
+        </div>
+      </div></div>
+      <div class="table-wrap">
+        <table><thead><tr><th>產品</th><th>包裝方式</th><th>包材</th><th class="num">用量</th><th class="num">損耗率</th><th class="num">實際扣量</th><th>操作</th></tr></thead>
+        <tbody id="bom-body"></tbody></table>
+      </div>
+    </div>
+
+    <!-- USAGE RANKING -->
+    <div id="panel-usage" class="panel">
+      <div style="display:flex;gap:10px;margin-bottom:16px;align-items:flex-end;">
+        <div class="fg"><label>統計期間</label>
+          <select id="usage-days" onchange="renderUsage()">
+            <option value="7">最近 7 天</option>
+            <option value="30" selected>最近 30 天</option>
+            <option value="90">最近 90 天</option>
+            <option value="0">全部時間</option>
+          </select>
+        </div>
+        <div class="fg"><label>顯示類型</label>
+          <select id="usage-type" onchange="renderUsage()">
+            <option value="all">全部</option>
+            <option value="package">包材</option>
+            <option value="product">產品</option>
+          </select>
+        </div>
+      </div>
+      <div class="card"><div class="card-body">
+        <div class="sec-title" style="margin-bottom:14px;">消耗量排行榜</div>
+        <div id="usage-body"></div>
+      </div></div>
+    </div>
+
+    <!-- TREND -->
+    <div id="panel-trend" class="panel">
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="fg" style="min-width:200px;"><label>選擇品項</label><select id="trend-item" onchange="renderTrend()"></select></div>
+        <div class="fg"><label>時間範圍</label>
+          <select id="trend-days" onchange="renderTrend()">
+            <option value="7">最近 7 天</option>
+            <option value="14">最近 14 天</option>
+            <option value="30" selected>最近 30 天</option>
+          </select>
+        </div>
+      </div>
+      <div class="card"><div class="card-body">
+        <div class="sec-title" style="margin-bottom:12px;">庫存異動趨勢</div>
+        <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
+        <div id="trend-stats" style="margin-top:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;"></div>
+      </div></div>
+    </div>
+
+    <!-- REPORT -->
+    <div id="panel-report" class="panel">
+      <div style="display:flex;gap:10px;margin-bottom:16px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="fg"><label>年份</label><select id="rpt-year"></select></div>
+        <div class="fg"><label>月份</label><select id="rpt-month"></select></div>
+        <button class="btn btn-primary" onclick="renderReport()">產生報表</button>
+        <button class="btn btn-default" onclick="exportReport()">匯出報表</button>
+      </div>
+      <div class="rpt-grid" id="rpt-metrics"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div class="card"><div class="card-body"><div class="sec-title" style="margin-bottom:12px;">本月出貨</div><div id="rpt-out"></div></div></div>
+        <div class="card"><div class="card-body"><div class="sec-title" style="margin-bottom:12px;">本月進貨</div><div id="rpt-in"></div></div></div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div id="panel-log" class="panel">
+      <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">
+        <div class="filter-btns">
+          <button class="fbtn active" onclick="setLF('all',this)">全部</button>
+          <button class="fbtn" onclick="setLF('出',this)">出貨</button>
+          <button class="fbtn" onclick="setLF('進',this)">進貨</button>
+          <button class="fbtn" onclick="setLF('調整',this)">手動調整</button>
+          <button class="fbtn" onclick="setLF('盤點',this)">盤點</button>
+        </div>
+        <div class="search-box" style="max-width:180px;"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
+          <input type="text" id="log-search" placeholder="搜尋…" oninput="renderLog()"></div>
+        <button class="btn btn-danger btn-sm" style="margin-left:auto;" onclick="clearLogs()">清除全部</button>
+      </div>
+      <div class="card"><div class="card-body" id="log-body"></div></div>
+    </div>
+
+    <!-- PURCHASE -->
+    <div id="panel-purchase" class="panel">
+      <div class="purchase-bar">
+        <div><div style="font-size:15px;font-weight:500;">採購清單</div><p style="font-size:13px;opacity:.8;margin-top:2px;">含採購週期記憶 · 建議採購量自動計算</p></div>
+        <button class="btn" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.2);color:#fff;" onclick="exportPurchase()">匯出採購單</button>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>品項名稱</th><th>規格</th><th>單位</th><th class="num">帳面庫存</th><th class="num">保留量</th><th class="num">可用庫存</th><th class="num">最低庫存</th><th class="num">建議採購量</th><th>採購週期</th><th>供應商</th><th>狀態</th></tr></thead>
+        <tbody id="pur-body"></tbody></table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ADD/EDIT ITEM MODAL -->
+<div class="modal-overlay" id="modal-add">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="modal-add-title">新增品項</div>
+      <button class="modal-close" onclick="closeModal('modal-add')"><svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="m-edit-id">
+      <div class="fg" style="margin-bottom:11px;"><label>料號（成品代號）</label><input type="text" id="m-partno" placeholder="例：00260IA2084063"></div>
+      <div class="fg" style="margin-bottom:11px;"><label>品項名稱 *</label><input type="text" id="m-name" placeholder="例：瓦楞紙箱A"></div>
+      <div class="fg" style="margin-bottom:11px;"><label>規格 / 型號</label><input type="text" id="m-spec" placeholder="例：30x20x15cm"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px;">
+        <div class="fg"><label>單位</label><input type="text" id="m-unit" placeholder="個、捲、kg"></div>
+        <div class="fg"><label>類型</label><select id="m-type"><option value="package">包材</option><option value="product">產品</option><option value="consumable">耗材</option></select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:11px;">
+        <div class="fg"><label>目前庫存</label><input type="number" id="m-stock" value="0" min="0" step="0.01"></div>
+        <div class="fg"><label>最低庫存</label><input type="number" id="m-min" value="0" min="0" step="0.01"></div>
+        <div class="fg"><label>損耗率%</label><input type="number" id="m-waste" value="0" min="0" max="100" step="0.01"></div>
+      </div>
+      <div class="fg" style="margin-bottom:11px;"><label>採購週期（天）</label><input type="number" id="m-cycle" value="0" min="0" step="1"></div>
+      <div class="fg"><label>供應商備註</label><input type="text" id="m-supplier" placeholder="供應商、聯絡資訊"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-default" onclick="closeModal('modal-add')">取消</button>
+      <button class="btn btn-primary" onclick="saveItem()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOCATION MODAL -->
+<div class="modal-overlay" id="modal-loc">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">指定庫位</div>
+      <button class="modal-close" onclick="closeModal('modal-loc')"><svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="fg" style="margin-bottom:11px;"><label>選擇品項</label><select id="loc-item"></select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:16px;">
+        <div class="fg"><label>庫位編號（例：A1、B3）</label><input type="text" id="loc-zone" placeholder="A1"></div>
+        <div class="fg"><label>數量</label><input type="number" id="loc-qty" value="0" min="0" step="0.01"></div>
+      </div>
+      <p style="font-size:12px;color:var(--text3);">若該品項已有此庫位紀錄，輸入 0 表示清空該庫位。</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-default" onclick="closeModal('modal-loc')">取消</button>
+      <button class="btn btn-purple" onclick="saveLoc()">儲存庫位</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCHEDULE MODAL -->
+<div class="modal-overlay" id="modal-sch">
+  <div class="modal" style="width:560px;">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-sch-title">新增出貨排程</div>
+      <button class="modal-close" onclick="closeModal('modal-sch')"><svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sch-edit-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px;">
+        <div class="fg"><label>客戶名稱 *</label><input type="text" id="sch-customer" placeholder="客戶公司或個人名稱"></div>
+        <div class="fg"><label>訂單編號</label><input type="text" id="sch-order" placeholder="例：ORD-2024-001"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px;">
+        <div class="fg"><label>預計出貨日期 *</label><input type="date" id="sch-date"></div>
+        <div class="fg"><label>負責人</label><input type="text" id="sch-owner" placeholder="選填"></div>
+      </div>
+      <div class="fg" style="margin-bottom:11px;">
+        <label>出貨產品（可多筆）</label>
+        <div id="sch-products-wrap" style="margin-top:6px;"></div>
+        <button class="btn btn-default btn-sm" onclick="addSchProduct()" style="margin-top:8px;">+ 新增產品</button>
+      </div>
+      <div class="fg" style="margin-bottom:4px;"><label>備註 / 說明</label><textarea id="sch-note" rows="3" placeholder="出貨說明、特殊要求等"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-default" onclick="closeModal('modal-sch')">取消</button>
+      <button class="btn btn-primary" onclick="saveSch()">儲存排程</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script src="js/data.js"></script>
+<script src="js/supabase-adapter.js"></script>
+<script src="js/analytics.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/location.js"></script>
+<script src="js/shipment.js"></script>
+<script src="js/bom.js"></script>
+<script src="js/report.js"></script>
+<script src="js/schedule.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
+
+
+
+
+
