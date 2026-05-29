@@ -12,9 +12,25 @@ const panelMeta={
   trend:['庫存趨勢圖','異動歷史與消耗分析'],
   report:['月報表','每月出入庫統計'],
   log:['操作紀錄','所有出入庫歷史'],
+  datacheck:['資料檢查','檢查重複、缺失與關聯異常'],
+  help:['使用說明','內部試用流程與注意事項'],
   purchase:['採購清單','含採購週期智慧建議'],
 };
-function go(name,el){
+function updateTrialStatus(){
+  const cloudMode=!!window.InventoryDataAdapter?.isSupabaseEnabled?.();
+  const modeText=cloudMode?'Supabase 雲端模式':'localStorage 本機模式';
+  const statusText=cloudMode?(cloudConnectionOk?'雲端連線正常':'雲端連線失敗'):'本機資料模式';
+  const modeEls=[document.getElementById('data-mode-badge'),document.getElementById('help-data-mode')].filter(Boolean);
+  const statusEls=[document.getElementById('cloud-status-badge'),document.getElementById('help-cloud-status')].filter(Boolean);
+  modeEls.forEach(el=>{el.textContent=modeText;el.className=`trial-badge ${cloudMode?'cloud':'local'}`;});
+  statusEls.forEach(el=>{el.textContent=statusText;el.className=`trial-badge ${cloudMode&&cloudConnectionOk?'ok':cloudMode?'fail':'local'}`;});
+}
+async function ensureFreshReportData(){
+  if(!window.InventoryDataAdapter?.isSupabaseEnabled?.())return true;
+  try{await reloadCloudReportData();return true;}
+  catch(err){console.error(err);alert(err?.message||'Supabase 報表資料讀取失敗');return false;}
+}
+async function go(name,el){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.querySelectorAll('.nav-sub-item').forEach(n=>n.classList.remove('active'));
@@ -23,6 +39,10 @@ function go(name,el){
   const [t,s]=panelMeta[name]||['',''];
   document.getElementById('tb-title').textContent=t;
   document.getElementById('tb-sub').textContent=s;
+  if(['overview','purchase','usage','trend','report','log','datacheck'].includes(name)){
+    const ok=await ensureFreshReportData();
+    if(!ok){closeMobileMenu();return;}
+  }
   if(name==='log')renderLog();
   else if(name==='purchase')renderPurchase();
   else if(name==='bom'){populateBOM();renderBOM();}
@@ -35,6 +55,8 @@ function go(name,el){
   else if(name==='usage')renderUsage();
   else if(name==='trend'){populateTrend();renderTrend();}
   else if(name==='report'){initRpt();renderReport();}
+  else if(name==='datacheck')renderDataCheck();
+  else if(name==='help')updateTrialStatus();
   else if(name==='schedule')renderSchedule();
   closeMobileMenu();
 }
@@ -105,6 +127,6 @@ function refresh(){updateMetrics();filterInv();renderOverview();updateSchBadge()
 (async function initApp(){
   try{await loadData();}
   catch(err){console.error(err);toast('雲端資料載入失敗，請檢查 Supabase 設定','error');}
-  initRpt();refresh();
+  initRpt();updateTrialStatus();refresh();
 })();
 

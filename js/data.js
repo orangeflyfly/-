@@ -5,6 +5,7 @@ let sfilt='all',lfilt='all';
 let trendChart=null;
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 let schView='cal',schFilter='all';
+let cloudConnectionOk=false;
 
 function esc(value){
   return String(value??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -57,6 +58,7 @@ function normalizeData(){
     active:i.active!==false
   }));
   bom=bom.map(b=>({
+    id:b.id||'',
     product:normalizeRefId(b.product),
     material:normalizeRefId(b.material),
     qty:toQty(b.qty),
@@ -64,7 +66,9 @@ function normalizeData(){
     label:String(b.label||'標準包裝')
   })).filter(b=>b.product&&b.material&&b.qty>0);
   locations=locations.map(l=>({
+    id:l.id||'',
     itemId:normalizeRefId(l.itemId),
+    warehouse:String(l.warehouse||''),
     zone:String(l.zone||'').toUpperCase().replace(/[^\w-]/g,''),
     qty:toQty(l.qty)
   })).filter(l=>l.itemId&&l.zone);
@@ -84,8 +88,9 @@ function normalizeData(){
   }));
   schedules=schedules.map(s=>{
     const raw=s.data?{id:s.id,...s.data}:s;
+    const status=raw.status||(raw.shipped?'shipped':'pending');
     return{
-      id:+raw.id||nextSchId++,
+      id:normalizeRefId(raw.id)||nextSchId++,
       customer:String(raw.customer||'未命名客戶'),
       order:String(raw.order||''),
       owner:String(raw.owner||''),
@@ -96,12 +101,13 @@ function normalizeData(){
         name:String(p.name||''),
         qty:toQty(p.qty)
       })).filter(p=>p.productId&&p.qty>0):[],
-      shipped:!!raw.shipped,
+      status,
+      shipped:status==='shipped'||!!raw.shipped,
       shippedAt:raw.shippedAt||''
     };
   });
   nextId=Math.max(+nextId||100,...items.filter(i=>typeof i.id==='number').map(i=>i.id+1),100);
-  nextSchId=Math.max(+nextSchId||1,...schedules.map(s=>s.id+1),1);
+  nextSchId=Math.max(+nextSchId||1,...schedules.filter(s=>typeof s.id==='number').map(s=>s.id+1),1);
 }
 function buildShipmentCheck(products){
   const issues=[],consumptions=[];
@@ -114,13 +120,14 @@ function buildShipmentCheck(products){
     if(qty<=0){issues.push(`${product.name} 出貨數量需大於 0`);return;}
     if(product.stock<qty)issues.push(`${product.name} 庫存不足（需 ${formatQty(qty)}${product.unit}，剩 ${formatQty(product.stock)}${product.unit}）`);
     bom.filter(b=>b.product===productId).forEach(b=>{
-      const mat=items.find(i=>i.id===b.material);if(!mat)return;
+      const mat=items.find(i=>i.id===b.material);
+      if(!mat){issues.push(`${product.name} 的包材對照包含未知品項，請先檢查 BOM 設定`);return;}
       const consume=toQty((b.qty*qty*(1+(b.waste||0)/100)).toFixed(2));
       materialNeeds[mat.id]=(materialNeeds[mat.id]||0)+consume;
     });
   });
   Object.entries(materialNeeds).forEach(([id,qty])=>{
-    const mat=items.find(i=>i.id===+id);if(!mat)return;
+    const mat=items.find(i=>i.id===normalizeRefId(id));if(!mat)return;
     const consume=toQty(qty.toFixed(2));
     if(mat.stock<consume)issues.push(`${mat.name} 包材不足（需 ${formatQty(consume)}${mat.unit}，剩 ${formatQty(mat.stock)}${mat.unit}）`);
     consumptions.push({item:mat,qty:consume});
@@ -144,13 +151,19 @@ async function loadData(){
       loadLocalStorageData();
       items=cloudItems;
       try{logs=await InventoryDataAdapter.loadLogs();}catch(logErr){console.error('Supabase logs 讀取失敗：',logErr);}
+      try{locations=await InventoryDataAdapter.loadLocations();}catch(locErr){console.error('Supabase locations 讀取失敗：',locErr);alert(locErr?.message||'Supabase locations 讀取失敗');}
+      try{bom=await InventoryDataAdapter.loadBomItems();}catch(bomErr){console.error('Supabase bom_items 讀取失敗：',bomErr);alert(bomErr?.message||'Supabase bom_items 讀取失敗');}
+      try{schedules=await InventoryDataAdapter.loadSchedules();}catch(schErr){console.error('Supabase schedules 讀取失敗：',schErr);alert(schErr?.message||'Supabase schedules 讀取失敗');}
+      cloudConnectionOk=true;
       normalizeData();return;
     }catch(err){
+      cloudConnectionOk=false;
       console.error('Supabase items 讀取失敗：',err);
       alert('Supabase items 讀取失敗，系統暫時載入 localStorage 資料，請檢查網址、anon key、RLS 或網路狀態。');
       if(loadLocalStorageData())return;
     }
   }else if(loadLocalStorageData())return;
+  cloudConnectionOk=!window.InventoryDataAdapter?.isSupabaseEnabled?.();
   // defaults
   items=[
     {id:1,name:'瓦楞紙箱 A',spec:'30x20x15cm',unit:'個',stock:48,minStock:20,type:'package',waste:2,supplier:''},
@@ -177,6 +190,36 @@ async function loadData(){
   logs=[];nextId=100;
   normalizeData();
 }
+async function reloadCloudItemsAndLogs(){
+  if(!window.InventoryDataAdapter?.isSupabaseEnabled())return;
+  items=await loadItemsFromSupabase();
+  try{logs=await InventoryDataAdapter.loadLogs();}catch(logErr){console.error('Supabase logs 重新載入失敗：',logErr);}
+  normalizeData();
+}
+async function reloadCloudLocations(){
+  if(!window.InventoryDataAdapter?.isSupabaseEnabled())return;
+  locations=await InventoryDataAdapter.loadLocations();
+  normalizeData();
+}
+async function reloadCloudBomItems(){
+  if(!window.InventoryDataAdapter?.isSupabaseEnabled())return;
+  bom=await InventoryDataAdapter.loadBomItems();
+  normalizeData();
+}
+async function reloadCloudSchedules(){
+  if(!window.InventoryDataAdapter?.isSupabaseEnabled())return;
+  schedules=await InventoryDataAdapter.loadSchedules();
+  normalizeData();
+}
+async function reloadCloudReportData(){
+  if(!window.InventoryDataAdapter?.isSupabaseEnabled())return;
+  items=await loadItemsFromSupabase();
+  try{logs=await InventoryDataAdapter.loadLogs();}catch(err){console.error('Supabase inventory_logs 報表讀取失敗：',err);throw err;}
+  try{locations=await InventoryDataAdapter.loadLocations();}catch(err){console.error('Supabase locations 報表讀取失敗：',err);throw err;}
+  try{bom=await InventoryDataAdapter.loadBomItems();}catch(err){console.error('Supabase bom_items 報表讀取失敗：',err);throw err;}
+  try{schedules=await InventoryDataAdapter.loadSchedules();}catch(err){console.error('Supabase schedules 報表讀取失敗：',err);throw err;}
+  normalizeData();
+}
 function saveData(){
   localStorage.setItem(SK,JSON.stringify({items,bom,logs,locations,schedules,nextId,nextSchId}));
   const n=new Date();
@@ -184,24 +227,67 @@ function saveData(){
 }
 
 // ── BACKUP ────────────────────────────────────────────────────────────────
-function exportBackup(){
-  const blob=new Blob([JSON.stringify({items,bom,logs,locations,schedules,nextId,nextSchId,_v:6,_d:new Date().toISOString()},null,2)],{type:'application/json'});
+function backupStamp(d){
+  return`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}-${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+}
+async function exportBackup(){
+  try{
+    if(window.InventoryDataAdapter?.isSupabaseEnabled?.())await reloadCloudReportData();
+  }catch(err){
+    console.error(err);
+    alert(err?.message||'Supabase 備份資料讀取失敗');
+    return;
+  }
+  const now=new Date();
+  const payload={
+    backupVersion:1,
+    exportedAt:now.toISOString(),
+    source:window.InventoryDataAdapter?.isSupabaseEnabled?.()?'supabase':'localStorage',
+    items,
+    inventory_logs:logs,
+    locations,
+    bom_items:bom,
+    schedules
+  };
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=`庫存備份_${new Date().toLocaleDateString('zh-TW').replace(/\//g,'')}.json`;a.click();
+  a.download=`inventory-backup-${backupStamp(now)}.json`;a.click();
+  URL.revokeObjectURL(a.href);
   toast('備份完成','success');
 }
-function importBackup(ev){
+function validateBackupPayload(d){
+  const required=['backupVersion','exportedAt','items','inventory_logs','locations','bom_items','schedules'];
+  const missing=required.filter(k=>!(k in d));
+  if(missing.length)throw new Error(`備份格式錯誤，缺少欄位：${missing.join(', ')}`);
+  ['items','inventory_logs','locations','bom_items','schedules'].forEach(k=>{
+    if(!Array.isArray(d[k]))throw new Error(`備份格式錯誤：${k} 必須是陣列`);
+  });
+}
+async function importBackup(ev){
   const f=ev.target.files[0];if(!f)return;
   const r=new FileReader();
-  r.onload=e=>{
+  r.onload=async e=>{
     try{
       const d=JSON.parse(e.target.result);
-      if(!d.items)throw 0;
-      if(!confirm(`確定還原備份？\n備份日期：${d._d?new Date(d._d).toLocaleString('zh-TW'):'-'}\n\n目前資料將被覆蓋！`))return;
-      items=d.items||[];bom=d.bom||[];logs=d.logs||[];locations=d.locations||[];schedules=d.schedules||[];nextId=d.nextId||100;nextSchId=d.nextSchId||1;
-      normalizeData();
+      validateBackupPayload(d);
+      if(!confirm('還原會覆蓋目前雲端資料，建議先匯出目前備份。確定要繼續嗎？'))return;
+      if(window.InventoryDataAdapter?.isSupabaseEnabled?.()){
+        await InventoryDataAdapter.restoreBackupMerge(d);
+        await reloadCloudReportData();
+      }else{
+        items=d.items||[];
+        logs=d.inventory_logs||[];
+        locations=d.locations||[];
+        bom=d.bom_items||[];
+        schedules=d.schedules||[];
+        normalizeData();
+      }
       toast('還原成功','success');refresh();
-    }catch{toast('備份格式錯誤','error');}
+    }catch(err){
+      console.error(err);
+      alert(err?.message||'備份格式錯誤');
+      toast('還原失敗','error');
+    }
   };
   r.readAsText(f);ev.target.value='';
 }

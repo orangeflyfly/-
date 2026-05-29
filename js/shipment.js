@@ -27,6 +27,12 @@ function previewSO(){
   document.getElementById('so-preview').innerHTML=html;
 }
 async function submitSO(){
+  try{
+    if(window.InventoryDataAdapter?.isSupabaseEnabled?.()){
+      await reloadCloudItemsAndLogs();
+      await reloadCloudBomItems();
+    }
+  }catch(err){console.error(err);alert(err?.message||'Supabase 出貨資料重新讀取失敗');return;}
   const pid=normalizeRefId(document.getElementById('so-product').value);
   const qty=toQty(document.getElementById('so-qty').value,1);
   const note=document.getElementById('so-note').value.trim();
@@ -41,23 +47,29 @@ async function submitSO(){
     return;
   }
   const productBefore=product.stock;
-  product.stock=toQty((product.stock-qty).toFixed(2));
-  await InventoryDataAdapter?.updateItem?.(product.id,{stock:product.stock});
-  const alerts=[];
-  for(const {item:mat,qty:consume} of check.consumptions){
-    const before=mat.stock;
-    mat.stock=toQty((mat.stock-consume).toFixed(2));
-    await InventoryDataAdapter?.updateItem?.(mat.id,{stock:mat.stock});
-    addLog('出',mat.name,consume,`出貨:${product.name}`,dateVal,mat.id,0,{beforeStock:before,afterStock:mat.stock,refType:'shipout'});
-    if(getStatus(mat)==='buy')alerts.push(mat);
-  }
-  addLog('出',product.name,qty,note||'出貨',dateVal,product.id,0,{beforeStock:productBefore,afterStock:product.stock,refType:'shipout'});
-  if(alerts.length){
-    document.getElementById('so-alert-card').style.display='';
-    document.getElementById('so-alert-body').innerHTML=alerts.map(a=>`<div class="alert alert-red">⚠ ${esc(a.name)} 可用庫存 ${formatQty(getAvailableStock(a))}${esc(a.unit)}，低於最低庫存 ${formatQty(a.minStock)}${esc(a.unit)}</div>`).join('');
-  }else{document.getElementById('so-alert-card').style.display='none';}
-  document.getElementById('so-qty').value=1;document.getElementById('so-note').value='';
-  toast(`出貨成功：${product.name} ×${formatQty(qty)}`,'success');refresh();populateSO();
+  const productAfter=toQty((product.stock-qty).toFixed(2));
+  try{
+    await InventoryDataAdapter?.updateItem?.(product.id,{stock:productAfter});
+    product.stock=productAfter;
+    const alerts=[];
+    for(const {item:mat,qty:consume} of check.consumptions){
+      const before=mat.stock;
+      const after=toQty((mat.stock-consume).toFixed(2));
+      await InventoryDataAdapter?.updateItem?.(mat.id,{stock:after});
+      mat.stock=after;
+      await addLog('扣包材',mat.name,consume,`出貨自動扣包材：${product.name}`,dateVal,mat.id,0,{beforeStock:before,afterStock:after,refType:'outbound'});
+      if(getStatus(mat)==='buy')alerts.push(mat);
+    }
+    await addLog('出',product.name,qty,note||'產品出貨',dateVal,product.id,0,{beforeStock:productBefore,afterStock:product.stock,refType:'outbound'});
+    await reloadCloudBomItems();
+    await reloadCloudItemsAndLogs();
+    if(alerts.length){
+      document.getElementById('so-alert-card').style.display='';
+      document.getElementById('so-alert-body').innerHTML=alerts.map(a=>`<div class="alert alert-red">⚠ ${esc(a.name)} 可用庫存 ${formatQty(getAvailableStock(a))}${esc(a.unit)}，低於最低庫存 ${formatQty(a.minStock)}${esc(a.unit)}</div>`).join('');
+    }else{document.getElementById('so-alert-card').style.display='none';}
+    document.getElementById('so-qty').value=1;document.getElementById('so-note').value='';
+    toast(`出貨成功：${product.name} ×${formatQty(qty)}`,'success');refresh();populateSO();
+  }catch(err){console.error(err);alert(err?.message||'出貨失敗，庫存或操作紀錄未完成同步，請重新整理後確認。');}
 }
 
 // ── SHIP IN ───────────────────────────────────────────────────────────────
@@ -74,11 +86,15 @@ async function submitSI(){
   const item=items.find(i=>i.id===iid);
   if(!item){toast('請選擇品項','error');return;}
   const before=item.stock;
-  item.stock=toQty((item.stock+qty).toFixed(2));
-  await InventoryDataAdapter?.updateItem?.(item.id,{stock:item.stock});
-  addLog('進',item.name,qty,supplier||'進貨',dateVal,item.id,price,{beforeStock:before,afterStock:item.stock,refType:'shipin'});
-  document.getElementById('si-qty').value=1;document.getElementById('si-supplier').value='';document.getElementById('si-price').value='';
-  toast(`入庫成功：${item.name} +${formatQty(qty)}${item.unit}`,'success');refresh();populateSI();
+  const after=toQty((item.stock+qty).toFixed(2));
+  try{
+    await InventoryDataAdapter?.updateItem?.(item.id,{stock:after});
+    await addLog('進',item.name,qty,supplier||'進貨',dateVal,item.id,price,{beforeStock:before,afterStock:after,refType:'shipin'});
+    item.stock=after;
+    await reloadCloudItemsAndLogs();
+    document.getElementById('si-qty').value=1;document.getElementById('si-supplier').value='';document.getElementById('si-price').value='';
+    toast(`入庫成功：${item.name} +${formatQty(qty)}${item.unit}`,'success');refresh();populateSI();
+  }catch(err){console.error(err);alert(err?.message||'進貨失敗，庫存或操作紀錄未完成同步，請重新整理後確認。');}
 }
 
 // ── STOCKTAKE ─────────────────────────────────────────────────────────────
@@ -103,12 +119,20 @@ function calcDiff(id){
 function resetST(){document.querySelectorAll('[id^="st-"]').forEach(e=>e.value='');document.querySelectorAll('[id^="diff-"]').forEach(e=>{e.textContent='—';e.style.color='var(--text3)';});}
 async function confirmST(){
   let changed=0;
-  for(const i of items){
-    const el=document.getElementById(`st-${i.id}`);if(!el||el.value==='')continue;
-    const actual=toQty(el.value);const diff=toQty((actual-i.stock).toFixed(2));
-    if(diff!==0){const before=i.stock;i.stock=actual;await InventoryDataAdapter?.updateItem?.(i.id,{stock:i.stock});addLog('盤點',i.name,Math.abs(diff),`盤點調整 ${diff>0?'+':''}${formatQty(diff)}`,localTodayString(),i.id,0,{beforeStock:before,afterStock:i.stock,refType:'stocktake'});changed++;}
-  }
-  if(!changed){toast('沒有差異需要調整');return;}
-  toast(`盤點完成，調整了 ${changed} 個品項`,'success');
-  resetST();renderST();refresh();
+  try{
+    for(const i of items){
+      const el=document.getElementById(`st-${i.id}`);if(!el||el.value==='')continue;
+      const actual=toQty(el.value);const diff=toQty((actual-i.stock).toFixed(2));
+      if(diff!==0){
+        const before=i.stock;
+        await InventoryDataAdapter?.updateItem?.(i.id,{stock:actual});
+        await addLog('盤點',i.name,Math.abs(diff),`盤點調整 ${diff>0?'+':''}${formatQty(diff)}`,localTodayString(),i.id,0,{beforeStock:before,afterStock:actual,refType:'stocktake'});
+        i.stock=actual;changed++;
+      }
+    }
+    if(!changed){toast('沒有差異需要調整');return;}
+    await reloadCloudItemsAndLogs();
+    toast(`盤點完成，調整了 ${changed} 個品項`,'success');
+    resetST();renderST();refresh();
+  }catch(err){console.error(err);alert('盤點調整失敗，請重新整理後確認資料狀態。');}
 }

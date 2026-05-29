@@ -1,7 +1,7 @@
 ﻿// ── STATUS / RESERVED STOCK ──────────────────────────────────────────────
 function getReservedQty(itemId, ignoreScheduleId=null){
   let reserved=0;
-  schedules.filter(s=>!s.shipped&&s.id!==ignoreScheduleId).forEach(s=>{
+  schedules.filter(s=>!s.shipped&&s.status!=='cancelled'&&s.id!==ignoreScheduleId).forEach(s=>{
     (s.products||[]).forEach(p=>{
       const qty=toQty(p.qty);
       if(p.productId===itemId)reserved+=qty;
@@ -18,7 +18,7 @@ function statusBadge(i){const s=getStatus(i);return s==='buy'?'<span class="badg
 function buildScheduleAvailabilityIssues(products, ignoreScheduleId=null){
   const needs={};
   (products||[]).forEach(p=>{
-    const productId=+p.productId||0,qty=toQty(p.qty);
+    const productId=normalizeRefId(p.productId),qty=toQty(p.qty);
     if(!productId||qty<=0)return;
     needs[productId]=(needs[productId]||0)+qty;
     bom.filter(b=>b.product===productId).forEach(b=>{
@@ -26,7 +26,7 @@ function buildScheduleAvailabilityIssues(products, ignoreScheduleId=null){
     });
   });
   return Object.entries(needs).map(([id,need])=>{
-    const item=items.find(i=>i.id===+id);if(!item)return null;
+    const item=items.find(i=>i.id===normalizeRefId(id));if(!item)return null;
     const available=getAvailableStock(item,ignoreScheduleId);
     return available<need?`${item.name} 可用庫存不足（本排程需 ${formatQty(need)}${item.unit}，目前可用 ${formatQty(available)}${item.unit}）`:null;
   }).filter(Boolean);
@@ -64,7 +64,7 @@ function cycleBadge(itemId){
 // ── DAILY CONSUMPTION ─────────────────────────────────────────────────────
 function getDailyOut(itemId,days=30){
   const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
-  const total=logs.filter(l=>l.type==='出'&&l.itemId===itemId&&new Date(l.rawTime)>=cutoff).reduce((s,l)=>s+l.qty,0);
+  const total=logs.filter(l=>(l.type==='出'||l.type==='扣包材')&&l.itemId===itemId&&new Date(l.rawTime)>=cutoff).reduce((s,l)=>s+l.qty,0);
   return total/days;
 }
 function predictDays(item){
@@ -85,12 +85,17 @@ function getItemLocs(itemId){return locations.filter(l=>l.itemId===itemId&&l.qty
 function locChips(itemId){
   const locs=getItemLocs(itemId);
   if(!locs.length)return'<span style="font-size:11px;color:var(--text3);">未設定</span>';
-  return locs.map(l=>`<span class="loc-chip">${esc(l.zone)}<span class="loc-qty">×${formatQty(l.qty)}</span><button class="loc-del" onclick="removeLoc(${itemId},'${l.zone}',event)">×</button></span>`).join('');
+  return locs.map(l=>`<span class="loc-chip">${esc(l.zone)}<span class="loc-qty">×${formatQty(l.qty)}</span><button class="loc-del" onclick='removeLoc(${JSON.stringify(itemId)},${JSON.stringify(l.zone)},event)'>×</button></span>`).join('');
 }
-function removeLoc(itemId,zone,e){
+async function removeLoc(itemId,zone,e){
   e.stopPropagation();
-  locations=locations.filter(l=>!(l.itemId===itemId&&l.zone===zone));
-  toast('已移除庫位','warn');renderLoc();saveData();
+  const loc=locations.find(l=>l.itemId===itemId&&l.zone===zone);
+  try{
+    if(loc)await InventoryDataAdapter?.deleteLocation?.(loc);
+    locations=locations.filter(l=>!(l.itemId===itemId&&l.zone===zone));
+    await reloadCloudLocations();
+    toast('已移除庫位','warn');renderLoc();filterInv();saveData();
+  }catch(err){console.error(err);alert(err?.message||'刪除庫位失敗');}
 }
 
 // ── METRICS ───────────────────────────────────────────────────────────────
@@ -123,8 +128,8 @@ function renderOverview(){
     ?urgents.slice(0,6).map(({i,d})=>`<div class="log-item"><div class="log-dot" style="background:${d<=3?'var(--red)':'var(--amber)'}"></div><div style="flex:1;font-size:13px;">${esc(i.name)}</div>${predictBadge(i)}</div>`).join('')
     :'<div class="alert alert-green">✓ 近 14 天內無品項預計耗盡</div>';
 
-  const colors={'出':'var(--red)','進':'var(--green)','調整':'var(--amber)','盤點':'var(--blue)'};
+  const colors={'出':'var(--red)','扣包材':'var(--amber)','進':'var(--green)','調整':'var(--amber)','盤點':'var(--blue)'};
   document.getElementById('ov-log').innerHTML=logs.slice(0,6).length
-    ?logs.slice(0,6).map(l=>`<div class="log-item"><div class="log-dot" style="background:${colors[l.type]||'var(--text3)'}"></div><div class="log-time">${esc(l.time)}</div><div style="flex:1;font-size:13px;">${esc(l.name)}</div><div style="font-family:var(--mono);font-size:13px;color:${colors[l.type]}">${l.type==='出'?'-':'+'}${formatQty(l.qty)}</div></div>`).join('')
+    ?logs.slice(0,6).map(l=>`<div class="log-item"><div class="log-dot" style="background:${colors[l.type]||'var(--text3)'}"></div><div class="log-time">${esc(l.time)}</div><div style="flex:1;font-size:13px;">${esc(l.name)}</div><div style="font-family:var(--mono);font-size:13px;color:${colors[l.type]}">${(l.type==='出'||l.type==='扣包材')?'-':'+'}${formatQty(l.qty)}</div></div>`).join('')
     :'<div class="empty"><div class="empty-icon">📝</div><p>尚無紀錄</p></div>';
 }

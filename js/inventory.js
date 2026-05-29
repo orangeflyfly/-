@@ -63,10 +63,14 @@ function toggleInvNameSort(){
 async function quickAdj(id,d){
   const i=items.find(x=>x.id===id);if(!i)return;
   const before=i.stock;
-  i.stock=Math.max(0,toQty((i.stock+d).toFixed(2)));
-  await InventoryDataAdapter?.updateItem?.(id,{stock:i.stock});
-  addLog('調整',i.name,Math.abs(d),d>0?'手動+1':'手動-1',null,i.id,0,{beforeStock:before,afterStock:i.stock,refType:'adjust'});
-  refresh();
+  const after=Math.max(0,toQty((i.stock+d).toFixed(2)));
+  try{
+    await InventoryDataAdapter?.updateItem?.(id,{stock:after});
+    await addLog('調整',i.name,Math.abs(d),d>0?'手動+1':'手動-1',null,i.id,0,{beforeStock:before,afterStock:after,refType:'adjust'});
+    i.stock=after;
+    await reloadCloudItemsAndLogs();
+    refresh();
+  }catch(err){console.error(err);alert(err?.message||'庫存調整失敗，請稍後再試。');}
 }
 async function adjustStock(id){
   const i=items.find(x=>x.id===id);if(!i)return;
@@ -79,11 +83,14 @@ async function adjustStock(id){
   const before=i.stock;
   const after=mode==='set'?val:toQty((i.stock+val).toFixed(2));
   const reason=(prompt('請輸入調整原因','手動調整')||'手動調整').trim()||'手動調整';
-  i.stock=after;
-  await InventoryDataAdapter?.updateItem?.(id,{stock:after});
-  addLog('調整',i.name,Math.abs(toQty((after-before).toFixed(2))),reason,localTodayString(),i.id,0,{beforeStock:before,afterStock:after,refType:'manual-adjust'});
-  toast(`庫存已調整：${formatQty(before)} → ${formatQty(after)}`,'success');
-  refresh();
+  try{
+    await InventoryDataAdapter?.updateItem?.(id,{stock:after});
+    await addLog('調整',i.name,Math.abs(toQty((after-before).toFixed(2))),reason,localTodayString(),i.id,0,{beforeStock:before,afterStock:after,refType:'manual-adjust'});
+    i.stock=after;
+    await reloadCloudItemsAndLogs();
+    toast(`庫存已調整：${formatQty(before)} → ${formatQty(after)}`,'success');
+    refresh();
+  }catch(err){console.error(err);alert(err?.message||'庫存調整失敗，請稍後再試。');}
 }
 
 // ── ITEM MODAL ────────────────────────────────────────────────────────────

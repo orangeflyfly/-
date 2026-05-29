@@ -1,5 +1,6 @@
 ﻿// ── SCHEDULE ──────────────────────────────────────────────────────────────
 function getSchStatus(sch){
+  if(sch.status==='cancelled')return'cancelled';
   if(sch.shipped)return'shipped';
   const today=localDateOnly(new Date());
   const d=localDateOnly(sch.date);
@@ -9,11 +10,11 @@ function getSchStatus(sch){
   return'pending';
 }
 function schStatusLabel(s){
-  const map={shipped:'已出貨',overdue:'已逾期',warning:'即將到期',pending:'待出貨'};
+  const map={shipped:'已出貨',cancelled:'已取消',overdue:'已逾期',warning:'即將到期',pending:'待出貨'};
   return map[s]||s;
 }
 function schStatusClass(s){
-  const map={shipped:'sch-shipped',overdue:'sch-overdue',warning:'sch-warning',pending:'sch-pending'};
+  const map={shipped:'sch-shipped',cancelled:'sch-shipped',overdue:'sch-overdue',warning:'sch-warning',pending:'sch-pending'};
   return map[s]||'sch-pending';
 }
 function updateSchBadge(){
@@ -83,7 +84,7 @@ function renderCal(){
     const hasAny=daySchs.length>0;
     const events=daySchs.slice(0,3).map(s=>{
       const st=getSchStatus(s);
-      return`<div class="cal-event ${st}" onclick="openSchDetail(${s.id},event)" title="${esc(s.customer)} - ${esc(s.products.map(p=>p.name+'×'+p.qty).join(', '))}">${esc(s.customer)}</div>`;
+      return`<div class="cal-event ${st}" onclick='openSchDetail(${JSON.stringify(s.id)},event)' title="${esc(s.customer)} - ${esc(s.products.map(p=>p.name+'×'+p.qty).join(', '))}">${esc(s.customer)}</div>`;
     }).join('');
     const more=daySchs.length>3?`<div style="font-size:10px;color:var(--text3);padding:1px 4px;">+${daySchs.length-3} 筆</div>`:'';
     return`<div class="cal-cell${isToday?' today':''}${hasAny?' has-schedule':''}" onclick="openAddSchOnDate('${dateStr}')">
@@ -133,9 +134,9 @@ function renderSchList(){
         ${s.note?`<div style="font-size:12px;color:var(--text3);margin-top:4px;">📝 ${esc(s.note)}</div>`:''}
       </div>
       <div class="sch-actions">
-        ${!s.shipped?`<button class="btn btn-success btn-sm" onclick="confirmSchShip(${s.id})">✓ 確認出貨</button>`:'<span style="font-size:11px;color:var(--green);">✓ 已完成</span>'}
-        <button class="btn btn-default btn-sm" onclick="openSchDetail(${s.id})">編輯</button>
-        <button class="btn btn-ghost btn-sm" onclick="delSch(${s.id})" style="color:var(--red);">刪除</button>
+        ${!s.shipped?`<button class="btn btn-success btn-sm" onclick='confirmSchShip(${JSON.stringify(s.id)})'>✓ 確認出貨</button>`:'<span style="font-size:11px;color:var(--green);">✓ 已完成</span>'}
+        <button class="btn btn-default btn-sm" onclick='openSchDetail(${JSON.stringify(s.id)})'>編輯</button>
+        <button class="btn btn-ghost btn-sm" onclick='delSch(${JSON.stringify(s.id)})' style="color:var(--red);">刪除</button>
       </div>
     </div>`;
   }).join('');
@@ -175,14 +176,16 @@ function openSchDetail(id,e){
 }
 function addSchProduct(){
   const eid=document.getElementById('sch-edit-id')?.value;
-  const s=eid?schedules.find(x=>x.id===parseInt(eid)):null;
+  const sid=normalizeRefId(eid);
+  const s=eid?schedules.find(x=>x.id===sid):null;
   if(s?.shipped){toast('已出貨排程不可修改扣庫內容','warn');return;}
   schProductRows.push({productId:'',name:'',qty:1});
   renderSchProductRows();
 }
 function renderSchProductRows(){
   const eid=document.getElementById('sch-edit-id')?.value;
-  const editing=schedules.find(x=>x.id===parseInt(eid));
+  const sid=normalizeRefId(eid);
+  const editing=schedules.find(x=>x.id===sid);
   const locked=!!editing?.shipped;
   const prods=items.filter(i=>i.type==='product'&&i.active!==false);
   const warning=locked?'<div class="alert alert-amber" style="margin-bottom:8px;">已出貨排程不可修改扣庫內容</div>':'';
@@ -197,56 +200,102 @@ function renderSchProductRows(){
     </div>`).join('');
 }
 function schProdChange(idx,sel){
-  const pid=parseInt(sel.value);
+  const pid=normalizeRefId(sel.value);
   const item=items.find(i=>i.id===pid);
   schProductRows[idx].productId=pid;
   schProductRows[idx].name=item?item.name:'';
 }
-function saveSch(){
+async function saveSch(){
   const customer=document.getElementById('sch-customer').value.trim();
   if(!customer){toast('請輸入客戶名稱','error');return;}
   const eid=document.getElementById('sch-edit-id').value;
-  const existing=eid?schedules.find(x=>x.id===parseInt(eid)):null;
+  const sid=normalizeRefId(eid);
+  const existing=eid?schedules.find(x=>x.id===sid):null;
   const date=document.getElementById('sch-date').value;
   if(!date){toast('請選擇出貨日期','error');return;}
   const prods=schProductRows.filter(r=>r.productId&&r.name);
   const common={customer,order:document.getElementById('sch-order').value.trim(),owner:document.getElementById('sch-owner').value.trim(),note:document.getElementById('sch-note').value.trim()};
-  if(existing?.shipped){
-    Object.assign(existing,common);
-    toast('排程已更新；已出貨排程不可修改扣庫內容','success');
-  }else{
-    const issues=buildScheduleAvailabilityIssues(prods,existing?.id||null);
-    if(issues.length&&!confirm(`此排程會造成未來可用庫存不足：\n${issues.join('\n')}\n\n仍要儲存排程？`))return;
-    const data={...common,date,products:prods,shipped:false};
-    if(existing){Object.assign(existing,data);toast('排程已更新','success');}
-    else{schedules.push({id:nextSchId++,...data});toast('排程已新增','success');}
-  }
-  closeModal('modal-sch');saveData();renderSchedule();
+  try{
+    if(existing?.shipped){
+      const updated={...existing,...common,status:'shipped',shipped:true};
+      const saved=await InventoryDataAdapter?.saveSchedule?.(updated);
+      Object.assign(existing,saved||updated);
+      toast('排程已更新；已出貨排程不可修改扣庫內容','success');
+    }else{
+      const issues=buildScheduleAvailabilityIssues(prods,existing?.id||null);
+      if(issues.length&&!confirm(`此排程會造成未來可用庫存不足：\n${issues.join('\n')}\n\n仍要儲存排程？`))return;
+      if(window.InventoryDataAdapter?.isSupabaseEnabled?.()){
+        if(!prods.length){toast('請至少選擇一個產品','error');return;}
+        if(existing){
+          const data={...existing,...common,date,products:[prods[0]],status:'pending',shipped:false,shippedAt:''};
+          const saved=await InventoryDataAdapter.saveSchedule(data);
+          Object.assign(existing,saved||data);
+          toast('排程已更新','success');
+        }else{
+          for(const p of prods){
+            const saved=await InventoryDataAdapter.saveSchedule({id:'',...common,date,products:[p],status:'pending',shipped:false,shippedAt:''});
+            schedules.push(saved);
+          }
+          toast(prods.length>1?`排程已新增 ${prods.length} 筆`:'排程已新增','success');
+        }
+      }else{
+        const data={...common,date,products:prods,status:'pending',shipped:false};
+        if(existing){Object.assign(existing,data);await InventoryDataAdapter?.saveSchedule?.(existing);toast('排程已更新','success');}
+        else{schedules.push({id:nextSchId++,...data});toast('排程已新增','success');}
+      }
+    }
+    await reloadCloudSchedules();
+    closeModal('modal-sch');saveData();renderSchedule();
+  }catch(err){console.error(err);alert(err?.message||'排程儲存失敗');}
 }
-function confirmSchShip(id){
+async function confirmSchShip(id){
   const s=schedules.find(x=>x.id===id);if(!s)return;
   if(s.shipped){toast('此排程已出貨，不能重複扣庫','warn');return;}
-  const check=buildShipmentCheck(s.products||[]);
+  try{
+    if(window.InventoryDataAdapter?.isSupabaseEnabled?.()){
+      await reloadCloudItemsAndLogs();
+      await reloadCloudBomItems();
+      await reloadCloudSchedules();
+    }
+  }catch(err){console.error(err);alert(err?.message||'Supabase 排程資料重新讀取失敗');return;}
+  const fresh=schedules.find(x=>x.id===id)||s;
+  if(fresh.shipped){toast('此排程已出貨，不能重複扣庫','warn');return;}
+  const check=buildShipmentCheck(fresh.products||[]);
   if(!check.ok){alert(`以下庫存不足，無法確認出貨：\n${check.issues.join('\n')}`);return;}
-  // deduct stock and BOM
-  (s.products||[]).forEach(p=>{
-    const item=items.find(i=>i.id===p.productId);if(!item)return;
-    const before=item.stock;
-    item.stock=toQty((item.stock-p.qty).toFixed(2));
-    addLog('出',item.name,p.qty,`排程出貨:${s.customer} ${s.order||''}`,s.date,item.id,0,{beforeStock:before,afterStock:item.stock,refType:'schedule',refId:s.id});
-  });
-  check.consumptions.forEach(({item:mat,qty})=>{
-    const before=mat.stock;
-    mat.stock=toQty((mat.stock-qty).toFixed(2));
-    addLog('出',mat.name,qty,`排程出貨:${s.customer}`,s.date,mat.id,0,{beforeStock:before,afterStock:mat.stock,refType:'schedule',refId:s.id});
-  });
-  s.shipped=true;s.shippedAt=new Date().toISOString();
-  toast(`${s.customer} 出貨完成！庫存已自動扣除`,'success');
-  saveData();refresh();renderSchedule();
+  try{
+    for(const p of fresh.products||[]){
+      const item=items.find(i=>i.id===p.productId);
+      if(!item)throw new Error(`找不到排程品項：${p.name||p.productId}`);
+      const before=item.stock;
+      const after=toQty((item.stock-p.qty).toFixed(2));
+      await InventoryDataAdapter?.updateItem?.(item.id,{stock:after});
+      item.stock=after;
+      await addLog('出',item.name,p.qty,`排程出貨:${fresh.customer} ${fresh.order||''}`,fresh.date,item.id,0,{beforeStock:before,afterStock:after,refType:'schedule',refId:fresh.id});
+    }
+    for(const {item:mat,qty} of check.consumptions){
+      const before=mat.stock;
+      const after=toQty((mat.stock-qty).toFixed(2));
+      await InventoryDataAdapter?.updateItem?.(mat.id,{stock:after});
+      mat.stock=after;
+      await addLog('扣包材',mat.name,qty,`排程出貨自動扣包材:${fresh.customer}`,fresh.date,mat.id,0,{beforeStock:before,afterStock:after,refType:'schedule',refId:fresh.id});
+    }
+    fresh.shipped=true;fresh.status='shipped';fresh.shippedAt=new Date().toISOString();
+    await InventoryDataAdapter?.saveSchedule?.(fresh);
+    await reloadCloudItemsAndLogs();
+    await reloadCloudBomItems();
+    await reloadCloudSchedules();
+    toast(`${fresh.customer} 出貨完成！庫存已自動扣除`,'success');
+    saveData();refresh();renderSchedule();
+  }catch(err){console.error(err);alert(err?.message||'確認出貨失敗');}
 }
-function delSch(id){
+async function delSch(id){
   if(!confirm('確定要刪除此排程？'))return;
-  schedules=schedules.filter(s=>s.id!==id);toast('已刪除','warn');saveData();renderSchedule();
+  try{
+    await InventoryDataAdapter?.deleteSchedule?.(id);
+    schedules=schedules.filter(s=>s.id!==id);
+    await reloadCloudSchedules();
+    toast('已刪除','warn');saveData();renderSchedule();
+  }catch(err){console.error(err);alert(err?.message||'排程刪除失敗');}
 }
 
 
